@@ -2,7 +2,7 @@
 
 import torch
 
-from manifold import Manifold
+from .manifold import Manifold
 
 
 class Euclidean(Manifold):
