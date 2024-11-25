@@ -4,9 +4,9 @@ from scipy.spatial.distance import squareform, pdist
 import numpy as np
 import torch
 
-def get_delta(embeddings):
+def get_delta(embeddings, sample_size=1500):
     embeddings = embeddings.cpu().detach().numpy()
-    idx = np.random.choice(len(embeddings), min(1500, len(embeddings)))
+    idx = np.random.choice(len(embeddings), min(sample_size, len(embeddings)))
     all_features_small = embeddings[idx]
 
     dists = pdist(all_features_small)
