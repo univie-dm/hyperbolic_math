@@ -1,0 +1,40 @@
+import torch
+
+from manifolds import ManifoldParameter
+
+
+class Embedding(torch.nn.Module):
+    """
+    Embedding layer that supports different manifolds.
+    """
+
+    # TODO: Add type information here for better autocomplete information
+
+    def __init__(self, input_dim: int, output_dim: int, manifold: str, c: float, requires_grad: bool = True):
+        super(Embedding, self).__init__()
+        self.manifold = manifold
+        self.c = c  # Curvature for non-Euclidean manifolds
+
+        weight = torch.randn(input_dim, output_dim)
+        self.weight = ManifoldParameter(weight, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
+
+        bias = torch.zeros(output_dim)
+        self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
+
+    def forward(self, x):
+        # We always need a bias addition, else it's just equivalent to a Euclidean NN
+        #TODO: Is proj->expmap_0 OR expmap_0->proj better?
+        #      Alternative bias translation: expmap(ptransp_0(bias, x), x, c) -- Stability??
+
+        # # Method 1
+        # x = self.manifold.proj(x, self.c)
+        # x = self.manifold.expmap_0(x, self.c)
+        # x = self.manifold.matvec_mul(self.weight, x, self.c)
+        # x = self.manifold.addition(x, self.bias, self.c)
+
+        # Method 2 - less computation & theoretically more stable - test in experiments:
+        x = self.manifold.proj(x, self.c)
+        x = self.manifold.expmap_0(x @ self.weight, self.c)
+        x = self.manifold.addition(x, self.bias, self.c)
+        
+        return x
