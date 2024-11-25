@@ -23,17 +23,14 @@ class Embedding(torch.nn.Module):
 
     def forward(self, x):
         # We always need a bias addition, else it's just equivalent to a Euclidean NN
-        #TODO: Is proj->expmap_0 OR expmap_0->proj better?
-        #      Alternative bias translation: expmap(ptransp_0(bias, x), x, c) -- Stability??
+        #TODO: Alternative bias translation: expmap(ptransp_0(bias, x), x, c) -- Stability??
 
-        # # Method 1
-        # x = self.manifold.proj(x, self.c)
+        # Method 1: matvec_mul == expmap_0(W*logmap_0(x))
         # x = self.manifold.expmap_0(x, self.c)
         # x = self.manifold.matvec_mul(self.weight, x, self.c)
         # x = self.manifold.addition(x, self.bias, self.c)
 
-        # Method 2 - less computation & theoretically more stable - test in experiments:
-        x = self.manifold.proj(x, self.c)
+        # Method 2 - less computation since expmap_0(logmap_0(x)==x), hence theoretically more stable - test in experiments:
         x = self.manifold.expmap_0(x @ self.weight, self.c)
         x = self.manifold.addition(x, self.bias, self.c)
         

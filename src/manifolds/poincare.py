@@ -4,7 +4,7 @@ import torch
 import traceback
 
 from manifolds.manifold import Manifold
-from utils.math_utils import artanh, tanh
+from utils.math_utils import artanh, tanh, arcosh
 
 
 class PoincareBall(Manifold):
@@ -17,7 +17,7 @@ class PoincareBall(Manifold):
     def __init__(self):
         super(PoincareBall, self).__init__()
         self.name = "PoincareBall"
-        self.min_enorm = 1e-15
+        self.min_enorm = 2e-15
         self.max_enorm_eps = self.min_enorm
 
     def _lambda(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -43,7 +43,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        Roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
         res = 2 / (1.0 - c * x2)
@@ -170,17 +170,21 @@ class PoincareBall(Manifold):
         ---------
         The PoincareBall multiplication converges towards the tangent space multiplication
             as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
-        Algebraically the same as expmap_0(r*logmap_0(x)), but less/more stable?? #TODO
+        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
-        sqrt_c = c.sqrt()
         x_norm = x.norm(p=2, dim=-1, keepdim=True)
-        res = tanh(r * artanh(sqrt_c * x_norm)) / (sqrt_c * x_norm) * x
-        if not torch.all(torch.isfinite(res)):
+        c_norm_prod = c.sqrt() * x_norm
+        res_unclipped = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
+        if not torch.all(torch.isfinite(res_unclipped)):
             print(f'scalar_mul: ZeroDivisionError')
             traceback.print_stack(limit=-1)
             # Stable case
             x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
-            res = tanh(r * artanh(sqrt_c * x_norm)) / (sqrt_c * x_norm) * x
+            c_norm_prod = c.sqrt() * x_norm
+            res_unclipped = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
+        res = self.proj(res_unclipped, c)
+        if torch.not_equal(res, res_unclipped).all():
+            print(f'scalar_mul: Norm clipping applied')
         return res
 
     def matvec_mul(self, m: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -267,11 +271,29 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO Algebraically the same as metric-tensor-induced-dist/mobius-logmap-dist/geodesic_unit_dist, but less/more stable??
+        Mobius-dist is more stable for boundary points; Metric-tensor-induced-dist is 75% faster
         """
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * self.addition(-x, y, c).norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
+        version = 'mobius_symmetric'
+        if version == 'mobius':
+            # Mobius-dist
+            sqrt_c = c.sqrt()
+            dist_c = artanh(sqrt_c * self.addition(-x, y, c).norm(p=2, dim=-1, keepdim=True))
+            res = 2 * dist_c / sqrt_c
+        elif version == 'mobius_symmetric':
+            #TODO check if this is algebraically allowed, numerically OK
+            # Symmetrized mobius-dist
+            sqrt_c = c.sqrt()
+            dist_c_1 = artanh(sqrt_c * self.addition(-x, y, c).norm(p=2, dim=-1, keepdim=True))
+            dist_c_2 = artanh(sqrt_c * self.addition(-y, x, c).norm(p=2, dim=-1, keepdim=True))
+            res = (dist_c_1 + dist_c_2) / sqrt_c
+        elif version == 'metric_tensor':
+            # Metric-tensor-induced-dist
+            x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+            y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
+            xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
+            res = 1 + 2 * c * xy_diff_sqnorm / ((1 - c * x_sqnorm) * (1 - c * y_sqnorm))
+            condition = res < 1 + self.min_enorm
+            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
         return res
 
     def dist_0(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -294,10 +316,6 @@ class PoincareBall(Manifold):
         ----------
         Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
-
-        Stability
-        ---------
-        #TODO Algebraically the same as metric-tensor-induced-dist/mobius-logmap-dist/geodesic_unit_dist, but less/more stable??
         """
         sqrt_c = c.sqrt()
         dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
@@ -334,30 +352,40 @@ class PoincareBall(Manifold):
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
             since tanh(z) ~ z for small z.
         #TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
-            lambda approaches 1/(sqrt(c)*self.max_enorm_eps) since ???.
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+            lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         #TODO stability of addition
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = c.sqrt() * v_norm
-        second_term = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
-        res = self.addition(x, second_term, c)
-        if not torch.all(torch.isfinite(second_term)):
+        second_term_unclipped = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
+        if not torch.all(torch.isfinite(second_term_unclipped)):
             print(f'expmap: ZeroDivisionError')
             traceback.print_stack(limit=-1)
-            ## Stable case 1 - norm clamping
+
+            # Stable case 1 - norm clamping
             # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = c.sqrt() * v_norm
-            # second_term = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
-            ## Stable case 2 - cnorm clamping
+            # second_term_unclipped = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
+
+            # Stable case 2 - cnorm clamping
             v_norm = v.norm(p=2, dim=-1, keepdim=True)
             c_norm_prod = (c.sqrt() * v_norm).clamp_min(self.min_enorm)
-            second_term = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
-            ## Stable case 3 - denom clamping
-            #v_norm = v.norm(p=2, dim=-1, keepdim=True)
-            #c_norm_prod = c.sqrt() * v_norm
-            #second_term = tanh(c_norm_prod * self._lambda(x, c) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
-            res = self.addition(x, second_term, c)
+            second_term_unclipped = tanh(c_norm_prod * self._lambda(x, c) / 2) / c_norm_prod * v
+
+            # Stable case 3 - denom clamping
+            # v_norm = v.norm(p=2, dim=-1, keepdim=True)
+            # c_norm_prod = c.sqrt() * v_norm
+            # second_term_unclipped = tanh(c_norm_prod * self._lambda(x, c) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
+
+        second_term = self.proj(second_term_unclipped, c)
+        if torch.not_equal(second_term, second_term_unclipped).all():
+            print(f'expmap: Norm clipping applied to second_term')
+
+        res_unclipped = self.addition(x, second_term, c)
+        res = self.proj(res_unclipped, c)
+        if torch.not_equal(res, res_unclipped).all():
+            print(f'expmap: Norm clipping applied to res')
         return res
 
     def expmap_0(self, v: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -390,17 +418,23 @@ class PoincareBall(Manifold):
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = c.sqrt() * v_norm
-        res = tanh(c_norm_prod) / c_norm_prod * v
-        if not torch.all(torch.isfinite(res)):
+        res_unclipped = tanh(c_norm_prod) / c_norm_prod * v
+        if not torch.all(torch.isfinite(res_unclipped)):
             print(f'expmap_0: ZeroDivisionError')
             traceback.print_stack(limit=-1)
-            ## Stable case 1 - norm clamping
+
+            # Stable case 1 - norm clamping
             # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = c.sqrt() * v_norm
+
             ## Stable case 2 - cnorm clamping
             v_norm = v.norm(p=2, dim=-1, keepdim=True)
             c_norm_prod = (c.sqrt() * v_norm).clamp_min(self.min_enorm)
-            res = tanh(c_norm_prod) / c_norm_prod * v
+
+            res_unclipped = tanh(c_norm_prod) / c_norm_prod * v
+        res = self.proj(res_unclipped, c)
+        if torch.not_equal(res, res_unclipped).all():
+            print(f'expmap_0: Norm clipping applied')
         return res
 
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -432,7 +466,7 @@ class PoincareBall(Manifold):
         #TODO: check which clamping works better
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
             since artanh(z) ~ z for small z.
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         ...addition...
         """
         sub = self.addition(-x, y, c)
@@ -442,12 +476,15 @@ class PoincareBall(Manifold):
         if not torch.all(torch.isfinite(res)):
             print(f'logmap: ZeroDivisionError')
             traceback.print_stack(limit=-1)
+
             # Stable case 1 - norm clamping
             # sub_norm = sub.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = c.sqrt() * sub_norm
-            ## Stable case 2 - cnorm clamping
+
+            # Stable case 2 - cnorm clamping
             sub_norm = sub.norm(p=2, dim=-1, keepdim=True)
             c_norm_prod = (c.sqrt() * sub_norm).clamp_min(self.min_enorm)
+
             res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, c)) * sub
         return res
 
@@ -485,12 +522,15 @@ class PoincareBall(Manifold):
         if not torch.all(torch.isfinite(res)):
             print(f'logmap_0: ZeroDivisionError')
             traceback.print_stack(limit=-1)
-            ## Stable case 1 - norm clamping
+
+            # Stable case 1 - norm clamping
             # y_norm = y.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = c.sqrt() * y_norm
-            ## Stable case 2 - cnorm clamping
+
+            # Stable case 2 - cnorm clamping
             y_norm = y.norm(p=2, dim=-1, keepdim=True)
             c_norm_prod = (c.sqrt() * y_norm).clamp_min(self.min_enorm)
+
             res = artanh(c_norm_prod) / c_norm_prod * y
         return res
 
@@ -523,7 +563,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         ...gyr... stability #TODO
         """
         conformal_frac =  self._lambda(x, c) / self._lambda(y, c)
@@ -556,7 +596,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         conformal_frac = 2 / self._lambda(y, c)
         res = conformal_frac * v
@@ -590,7 +630,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         uv = (u * v).sum(dim=-1, keepdim=True)
         res = uv * self._lambda(x, c) ** 2
@@ -622,7 +662,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         res = self._lambda(x, c) * v_norm
@@ -653,14 +693,14 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        self._lambda() is roughly bounded from above by 1/(sqrt(c)*self.max_enorm_eps)
+        self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         res = grad / self._lambda(x, c) ** 2
         return res
 
     def proj(self, x: torch.Tensor, c: torch.Tensor):
         """
-        Project point(s) x onto the clipped PoincareBall by restricting the Euclidean norm(s) to 1/sqrt(c)-self.max_enorm_eps.
+        Project point(s) x onto the clipped PoincareBall by restricting the Euclidean norm(s) to 1/c.sqrt()-self.max_enorm_eps.
 
         Parameters
         ----------
@@ -683,17 +723,12 @@ class PoincareBall(Manifold):
         ---------
         Precision depends on c
         """
-        max_enorm = (1 / c.sqrt()).to(torch.float64) - self.max_enorm_eps
-        print(max_enorm - (1 / c.sqrt()).to(torch.float64))
+        max_enorm = (1 / c.sqrt()).to(x.dtype) - self.max_enorm_eps
+        assert max_enorm < (1 / c.sqrt()).to(x.dtype)
         x_norm = x.norm(p=2, dim=-1, keepdim=True)
         proj_x = (max_enorm / x_norm) * x
         condition = x_norm > max_enorm
-        print(condition)
         res = torch.where(condition, proj_x, x)
-
-        temp = res.norm(p=2, dim=-1, keepdim=True)
-        print(temp)
-        print(torch.equal(torch.full_like(temp, max_enorm), temp))
         return res
 
     def is_in_manifold(self, x: torch.Tensor, c: torch.Tensor) -> bool:
@@ -713,8 +748,6 @@ class PoincareBall(Manifold):
             True if all points x lie in the PoincareBall, False otherwise
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
-        #r2 = torch.ones_like(x2) * ((1 + c*self.min_enorm)/c) # old
-        #res = torch.all(x2 <= r2) # old
         r2 = torch.ones_like(x2) / c
         res = torch.all(x2 < r2)
         return res
