@@ -11,9 +11,16 @@ authors = [
 ]
 description = "Hyperbolic Mathematics"
 requires-python = ">=3.8,<3.11"
+dependencies = [
+    "numpy",
+    "torch",
+    "scipy",
+    "tqdm"
+]
 
 [project.optional-dependencies]
 test = ["pytest>=8.3.3"]
+dev = ["pytest>=8.3.3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
