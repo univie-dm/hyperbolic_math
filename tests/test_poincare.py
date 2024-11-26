@@ -1,4 +1,4 @@
-## Call this test via command line: python -m pytest src/tests/test_poincare.py -s
+## Call this test via command line: python -m pytest tests/test_poincare.py -s
 
 import random
 from typing import Tuple, Union
@@ -391,7 +391,7 @@ def test_expmap_and_logmap(
         c: torch.Tensor,
         tolerance: Tuple[float, float]
     ) -> None:
-    """Test the expmap, expmap_0, logmap nad logmap_0 operations."""
+    """Test the expmap, expmap_0, logmap and logmap_0 operations."""
     atol, rtol = tolerance
     x, y = uniform_manifold_points.split(uniform_manifold_points.shape[0]//2, dim=0)
     v = torch.empty_like(uniform_manifold_points).uniform_(-1_000, 1_000)
@@ -451,99 +451,14 @@ def test_expmap_and_logmap(
 
 
 
-#TODO:
-@pytest.mark.skip(reason="Currently failing due to the lack of implementation")
-def test_gyration(
-    manifold: PoincareBall, uniform_ball_points: torch.Tensor, c: torch.Tensor, tolerance: Tuple[float, float]
-) -> None:
-    x, y, z, a = uniform_ball_points.split(uniform_ball_points.shape[0] // 4, dim=0)
-    atol, rtol = tolerance
-    # # Gyration identity
-    # first_term = -manifold.mobius_add(x, y, c)
-    # second_term = manifold.mobius_add(x, manifold.mobius_add(y, z, c), c)
-    # torch.testing.assert_close(
-    #     manifold._gyration(x, y, z, c), manifold.mobius_add(first_term, second_term, c), atol=atol, rtol=rtol
-    # )
-    # (Gyro-)commutative law
-    torch.testing.assert_close(
-        manifold.mobius_add(x, y, c),
-        manifold._gyration(x, y, manifold.mobius_add(y, x, c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Gyrosum inversion law
-    torch.testing.assert_close(
-        -manifold.mobius_add(x, y, c),
-        manifold._gyration(x, y, manifold.mobius_add(-y, -x, c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Left (gyro-)associative law
-    torch.testing.assert_close(
-        manifold.mobius_add(x, manifold.mobius_add(y, z, c), c),
-        manifold.mobius_add(manifold.mobius_add(x, y, c), manifold._gyration(x, y, z, c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Right (gyro-)associative law
-    torch.testing.assert_close(
-        manifold.mobius_add(manifold.mobius_add(x, y, c), z, c),
-        manifold.mobius_add(x, manifold.mobius_add(y, manifold._gyration(y, x, z, c), c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Left cancellation law
-    torch.testing.assert_close(
-        manifold._gyration(x, y, manifold.mobius_add(z, a, c), c),
-        manifold.mobius_add(manifold._gyration(x, y, z, c), manifold._gyration(x, y, a, c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Left loop property
-    torch.testing.assert_close(
-        manifold._gyration(x, y, z, c),
-        manifold._gyration(manifold.mobius_add(x, y, c), y, z, c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Right loop property
-    torch.testing.assert_close(
-        manifold._gyration(x, y, z, c),
-        manifold._gyration(x, manifold.mobius_add(y, x, c), z, c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # Identity gyroautomorphism property
-    r1 = torch.rand((x.shape[0], 1), dtype=torch.float64)
-    r2 = torch.rand((x.shape[0], 1), dtype=torch.float64)
-    torch.testing.assert_close(
-        manifold._gyration(manifold.mobius_left_scalarmul(r1, x, c), manifold.mobius_left_scalarmul(r2, x, c), y, c),
-        y,
-        atol=atol,
-        rtol=rtol,
-    )
-    # Gyroautomorphism property
-    torch.testing.assert_close(
-        manifold._gyration(x, y, manifold.mobius_left_scalarmul(r1, z, c), c),
-        manifold.mobius_left_scalarmul(r1, manifold._gyration(x, y, z, c), c),
-        atol=atol,
-        rtol=rtol,
-    )
-    # First gyrogroup theorems
-    torch.testing.assert_close(manifold._gyration(torch.zeros_like(x), y, z, c), z, atol=atol, rtol=rtol)
-    torch.testing.assert_close(manifold._gyration(-y, y, z, c), z, atol=atol, rtol=rtol)
-    torch.testing.assert_close(manifold._gyration(x, x, z, c), z, atol=atol, rtol=rtol)
-    torch.testing.assert_close(manifold._gyration(x, y, torch.zeros_like(x), c), torch.zeros_like(x), atol=atol, rtol=rtol)
-    torch.testing.assert_close(manifold._gyration(x, y, -z, c), -manifold._gyration(x, y, z, c), atol=atol, rtol=rtol)
-    torch.testing.assert_close(manifold._gyration(x, torch.zeros_like(x), z, c), z, atol=atol, rtol=rtol)
-    # TODO: conformality
-
-@pytest.mark.skip(reason="Currently failing")
+@pytest.mark.skip(reason="not implemented yet")
 def test_tangent_inner_and_norm(
-        manifold: Union[Euclidean, PoincareBall, Hyperboloid], uniform_manifold_points: torch.Tensor,
-        c: torch.Tensor, tolerance: Tuple[float, float],
-        ) -> None:
-    """Test the ... operations."""
+        manifold: Union[Euclidean, PoincareBall, Hyperboloid],
+        uniform_manifold_points: torch.Tensor,
+        c: torch.Tensor,
+        tolerance: Tuple[float, float]
+    ) -> None:
+    """Test the tangent_inner and tangent_norm operations."""
     pass
     #         tangent = unary_case.v
     #         point = unary_case.x
@@ -555,12 +470,14 @@ def test_tangent_inner_and_norm(
     #         except NotImplementedError:
     #             pytest.skip("dist is not implemented for {}".format(unary_case.manifold))
 
-@pytest.mark.skip(reason="Currently failing")
+@pytest.mark.skip(reason="not implemented yet")
 def test_ptransp(
-        manifold: Union[Euclidean, PoincareBall, Hyperboloid], uniform_manifold_points: torch.Tensor,
-        c: torch.Tensor, tolerance: Tuple[float, float],
-        ) -> None:
-    """Test the ... operations."""
+        manifold: Union[Euclidean, PoincareBall, Hyperboloid],
+        uniform_manifold_points: torch.Tensor,
+        c: torch.Tensor,
+        tolerance: Tuple[float, float]
+    ) -> None:
+    """Test the ptransp and ptransp_0 operations."""
     pass
     #         test_parallel_transport() -> None:
     #     mu1 = t([2., 1, np.sqrt(2)]).double() / radius
@@ -661,4 +578,96 @@ def test_ptransp(
     #     assert torch.isfinite(a.grad).all()
     #     assert torch.isfinite(b.grad).all()
     #     assert torch.isfinite(manifold.k.grad).all()
+
+#TODO:
+@pytest.mark.skip(reason="needs recheck")
+def test_gyration(
+        manifold: Union[Euclidean, PoincareBall, Hyperboloid],
+        uniform_manifold_points: torch.Tensor,
+        c: torch.Tensor,
+        tolerance: Tuple[float, float]
+    ) -> None:
+    """Test the gyration operation of the PoincareBall."""
+    x, y, z, a = uniform_ball_points.split(uniform_ball_points.shape[0] // 4, dim=0)
+    atol, rtol = tolerance
+    # # Gyration identity
+    # first_term = -manifold.mobius_add(x, y, c)
+    # second_term = manifold.mobius_add(x, manifold.mobius_add(y, z, c), c)
+    # torch.testing.assert_close(
+    #     manifold._gyration(x, y, z, c), manifold.mobius_add(first_term, second_term, c), atol=atol, rtol=rtol
+    # )
+    # (Gyro-)commutative law
+    torch.testing.assert_close(
+        manifold.mobius_add(x, y, c),
+        manifold._gyration(x, y, manifold.mobius_add(y, x, c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Gyrosum inversion law
+    torch.testing.assert_close(
+        -manifold.mobius_add(x, y, c),
+        manifold._gyration(x, y, manifold.mobius_add(-y, -x, c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Left (gyro-)associative law
+    torch.testing.assert_close(
+        manifold.mobius_add(x, manifold.mobius_add(y, z, c), c),
+        manifold.mobius_add(manifold.mobius_add(x, y, c), manifold._gyration(x, y, z, c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Right (gyro-)associative law
+    torch.testing.assert_close(
+        manifold.mobius_add(manifold.mobius_add(x, y, c), z, c),
+        manifold.mobius_add(x, manifold.mobius_add(y, manifold._gyration(y, x, z, c), c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Left cancellation law
+    torch.testing.assert_close(
+        manifold._gyration(x, y, manifold.mobius_add(z, a, c), c),
+        manifold.mobius_add(manifold._gyration(x, y, z, c), manifold._gyration(x, y, a, c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Left loop property
+    torch.testing.assert_close(
+        manifold._gyration(x, y, z, c),
+        manifold._gyration(manifold.mobius_add(x, y, c), y, z, c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Right loop property
+    torch.testing.assert_close(
+        manifold._gyration(x, y, z, c),
+        manifold._gyration(x, manifold.mobius_add(y, x, c), z, c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # Identity gyroautomorphism property
+    r1 = torch.rand((x.shape[0], 1), dtype=torch.float64)
+    r2 = torch.rand((x.shape[0], 1), dtype=torch.float64)
+    torch.testing.assert_close(
+        manifold._gyration(manifold.mobius_left_scalarmul(r1, x, c), manifold.mobius_left_scalarmul(r2, x, c), y, c),
+        y,
+        atol=atol,
+        rtol=rtol,
+    )
+    # Gyroautomorphism property
+    torch.testing.assert_close(
+        manifold._gyration(x, y, manifold.mobius_left_scalarmul(r1, z, c), c),
+        manifold.mobius_left_scalarmul(r1, manifold._gyration(x, y, z, c), c),
+        atol=atol,
+        rtol=rtol,
+    )
+    # First gyrogroup theorems
+    torch.testing.assert_close(manifold._gyration(torch.zeros_like(x), y, z, c), z, atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold._gyration(-y, y, z, c), z, atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold._gyration(x, x, z, c), z, atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold._gyration(x, y, torch.zeros_like(x), c), torch.zeros_like(x), atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold._gyration(x, y, -z, c), -manifold._gyration(x, y, z, c), atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold._gyration(x, torch.zeros_like(x), z, c), z, atol=atol, rtol=rtol)
+    # TODO: conformality
+
 

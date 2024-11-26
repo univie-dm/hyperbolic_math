@@ -285,7 +285,7 @@ class Euclidean(Manifold):
         res : torch.Tensor
             The tangent norm(s) of v
         """
-        res = v.pow(2).sum(dim=-1, keepdim=True)
+        res = v.norm(p=2, dim=-1, keepdim=True)
         return res
 
     def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
