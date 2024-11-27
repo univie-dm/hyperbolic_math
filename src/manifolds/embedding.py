@@ -1,6 +1,6 @@
 import torch
 
-from manifolds import ManifoldParameter
+from .manifold import ManifoldParameter
 
 
 class Embedding(torch.nn.Module):

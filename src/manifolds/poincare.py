@@ -3,8 +3,8 @@
 import torch
 import traceback
 
-from manifolds.manifold import Manifold
-from utils.math_utils import artanh, tanh, arcosh
+from .manifold import Manifold
+from ..utils.math_utils import artanh, tanh, arcosh
 
 
 class PoincareBall(Manifold):
