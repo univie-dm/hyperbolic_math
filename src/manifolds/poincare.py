@@ -13,11 +13,24 @@ class PoincareBall(Manifold):
     [Gyrospace/Mobius version]
 
     Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
+    
+    Parameters
+        ----------
+        dtype : torch.dtype
+            Data type that is used for the computations. Sets the tolerances for numerical errors.
     """
-    def __init__(self):
+    def __init__(self, dtype: torch.dtype):
         super(PoincareBall, self).__init__()
         self.name = "PoincareBall"
-        self.min_enorm = 2e-15
+
+        # Set precision based on dtype
+        if dtype == torch.float32:
+            self.min_enorm = 1e-07
+        elif dtype == torch.float64:
+            self.min_enorm = 2e-15
+        else:
+            raise ValueError(f'Invalid dtype: {dtype}')
+    
         self.max_enorm_eps = self.min_enorm
 
     def _lambda(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
