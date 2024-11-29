@@ -37,6 +37,10 @@ class Manifold(object):
     def expmap_0(self, v: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Map tangent vector(s) v at the manifold's origin to the manifold. [Exponential map]"""
         raise NotImplementedError
+    
+    def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """Approximate mapping of vector(s) v at manifold point(s) x to the manifold. [Retraction map]"""
+        raise NotImplementedError
 
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Map manifold point(s) y to the tangent space(s) of manifold point(s) x. [Logarithmic map]"""

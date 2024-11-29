@@ -450,6 +450,35 @@ class PoincareBall(Manifold):
             print(f'expmap_0: Norm clipping applied')
         return res
 
+    def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        First-order approximation of the exponential map for vector(s) v at manifold point(s) x.
+        [Retraction map]
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            vector(s) in the tangent space(s) of x
+        x : torch.Tensor
+            PoincareBall point(s)
+        c : torch.Tensor
+            magnitude of sectional curvature
+
+        Returns
+        -------
+        res : torch.Tensor
+            The resulting PoincareBall point(s) after approximate mapping v to the PoincareBall
+        
+        References
+        ----------
+        Gary Bécigneul and Octavian Ganea. "Riemannian adaptive optimization methods."
+            International Conference on Learning Representations (2019).
+        """
+        # always assume u is scaled properly
+        approx = v + x
+        
+        return self.proj(approx, c=c)
+
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
         Map PoincareBall point(s) y to the tangent space(s) of PoincareBall point(s) x.

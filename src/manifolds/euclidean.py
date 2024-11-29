@@ -156,6 +156,28 @@ class Euclidean(Manifold):
         res = v
         return res
 
+    def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        First-order approximation of the exponential map for vector(s) v at manifold point(s) x.
+        [Retraction map]
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            vector(s) in the tangent space(s) of x
+        x : torch.Tensor
+            PoincareBall point(s)
+        c : torch.Tensor
+            magnitude of sectional curvature
+
+        Returns
+        -------
+        res : torch.Tensor
+            The resulting Euclidean point(s) after approximate mapping v to Cartesian coordinates
+        """
+        res = v + x
+        return res
+
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
         Map Euclidean point(s) y to the tangent space(s) of Euclidean point(s) x. [Logarithmic map]
