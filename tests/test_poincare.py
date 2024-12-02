@@ -30,14 +30,14 @@ def dtype(request: pytest.FixtureRequest) -> torch.dtype:
 
 #TODO add Hyperboloid
 @pytest.fixture(scope="module", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
-def manifold(request: pytest.FixtureRequest, dtype:torch.dtype) -> Union[Euclidean, PoincareBall, Hyperboloid]:
+def manifold(request: pytest.FixtureRequest) -> Union[Euclidean, PoincareBall, Hyperboloid]:
     """Instantiate the manifold(s)."""
     if request.param == Euclidean:
         manifold = Euclidean()
     elif request.param == PoincareBall:
-        manifold = PoincareBall(dtype=dtype)
+        manifold = PoincareBall()
     elif request.param == Hyperboloid:
-        manifold = Hyperboloid(dtype=dtype)
+        manifold = Hyperboloid()
     return manifold
 
 @pytest.fixture(scope="module")

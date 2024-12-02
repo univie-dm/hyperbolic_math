@@ -20,17 +20,11 @@ class Hyperboloid(Manifold):
             Data type that is used for the computations. Sets the tolerances for numerical errors.
     """
 
-    def __init__(self, dtype: torch.dtype):
+    def __init__(self):
         super(Hyperboloid, self).__init__()
         self.name = "Hyperboloid"
-        # Set precision based on dtype
-        if dtype == torch.float32:
-            self.min_enorm = 1e-07
-        elif dtype == torch.float64:
-            self.min_enorm = 2e-15
-        else:
-            raise ValueError(f'Invalid dtype: {dtype}')
-    
+        
+        self.min_enorm = 2e-15
         self.max_enorm_eps = self.min_enorm
 
     def minkowski_dot(self, x, y, keepdim=True):
