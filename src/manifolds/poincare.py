@@ -53,7 +53,7 @@ class PoincareBall(Manifold):
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         # BUG: If you don't clamp exactly like this, training will explode
-        return 2 / (1 + -c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(1e-15)
+        return 2 / (1 -c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(1e-15)
 
     def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -430,7 +430,8 @@ class PoincareBall(Manifold):
             res_unclipped = tanh(c_norm_prod) / c_norm_prod * v
         res = self.proj(res_unclipped, c)
         if torch.not_equal(res, res_unclipped).all():
-            print(f"expmap_0: Norm clipping applied")
+            ...
+            # print(f"expmap_0: Norm clipping applied")
         return res
 
     def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
