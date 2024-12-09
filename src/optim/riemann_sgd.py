@@ -100,7 +100,6 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                         manifold = self._default_manifold
 
                     grad.add_(point, alpha=weight_decay)
-                    # BUG: Grad shapes here are fucked up
                     grad = manifold.egrad2rgrad(grad, point, self.c)
                     if momentum > 0:
                         momentum_buffer = state["momentum_buffer"]

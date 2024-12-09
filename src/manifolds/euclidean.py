@@ -1,5 +1,7 @@
 """Euclidean manifold."""
 
+from typing import Union
+
 import torch
 
 from .manifold import Manifold
@@ -9,6 +11,7 @@ class Euclidean(Manifold):
     """
     Euclidean Manifold class.
     """
+
     def __init__(self):
         super(Euclidean, self).__init__()
         self.name = "Euclidean"
@@ -29,7 +32,7 @@ class Euclidean(Manifold):
         Returns
         -------
         res : torch.Tensor
-            The sum(s) of x and y     
+            The sum(s) of x and y
         """
         res = x + y
         return res
@@ -286,6 +289,16 @@ class Euclidean(Manifold):
             The tangent inner product(s) of u and v
         """
         res = (u * v).sum(dim=-1, keepdim=True)
+        return res
+
+    def component_inner(self, u: torch.Tensor, v: Union[torch.Tensor, None], x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        # Overwrite of the default component_inner that correctly squares
+        # Requires for calculating the second moment in Adam updates
+        if v is None:
+            res = u.pow(2)
+        else:
+            res = u * v
+
         return res
 
     def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
