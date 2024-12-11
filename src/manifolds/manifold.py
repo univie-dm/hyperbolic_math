@@ -119,28 +119,6 @@ class Manifold:
         y_transp = self.ptransp(y, x, z, c)
         return z, y_transp
 
-    def component_inner(self, u: torch.Tensor, v: Union[torch.Tensor, None], x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        """Compute the inner product(s) between tangent vectors u and v at manifold point x
-        with respect to the Riemannian metric of the manifold.
-
-        Parameters
-        ----------
-        u : torch.Tensor
-            tangent vector at point x
-        v : Optional[torch.Tensor]
-            tangent vector at point x
-        x : torch.Tensor
-            PoincareBall point
-
-        Returns
-        -------
-        torch.Tensor
-            inner product component wise (broadcasted)
-        """
-        if v is None:
-            v = u
-        return self.tangent_inner(u, v, x, c)
-
     def tangent_inner(self, u: torch.Tensor, v: Union[torch.Tensor, None], x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Compute the inner product(s) between tangent vectors u and v of the tangent space(s)
         at manifold point(s) x with respect to the Riemannian metric of the manifold."""

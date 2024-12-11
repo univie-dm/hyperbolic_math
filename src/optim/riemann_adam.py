@@ -131,7 +131,7 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad = manifold.egrad2rgrad(grad, point, self.c)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
                     exp_avg_sq.mul_(betas[1]).add_(
-                        manifold.component_inner(u=grad, v=None, x=point, c=self.c), alpha=1 - betas[1]
+                        manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c), alpha=1 - betas[1]
                     )
                     bias_correction1 = 1 - betas[0] ** state["step"]
                     bias_correction2 = 1 - betas[1] ** state["step"]
