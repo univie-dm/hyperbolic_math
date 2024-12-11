@@ -52,8 +52,8 @@ class PoincareBall(Manifold):
         ---------
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        # BUG: If you don't clamp exactly like this, training will explode
-        return 2 / (1 -c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(1e-15)
+
+        return 2 / (1 -c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(self.max_enorm_eps)
 
     def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -749,7 +749,6 @@ class PoincareBall(Manifold):
         ---------
         Precision depends on c
         """
-        # BUG: Must clamp like them to get their results, can't use enorm here
         if x.dtype == torch.float32:
             eps = 4e-3
         else:
