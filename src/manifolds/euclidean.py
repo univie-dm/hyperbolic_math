@@ -11,7 +11,7 @@ class Euclidean(Manifold):
     """
 
     def __init__(self):
-        super(Euclidean, self).__init__()
+        super().__init__()
         self.name = "Euclidean"
 
     def addition(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:

@@ -14,7 +14,7 @@ class Embedding(torch.nn.Module):
     bias: ManifoldParameter
 
     def __init__(self, input_dim: int, output_dim: int, manifold: str, c: float, requires_grad: bool = True):
-        super(Embedding, self).__init__()
+        super().__init__()
         self.manifold = manifold
         self.c = torch.tensor(c, dtype=torch.float32)  # Curvature for non-Euclidean manifolds
 
