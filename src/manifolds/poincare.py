@@ -4,7 +4,7 @@ import traceback
 
 import torch
 
-from ..utils.math_utils import arcosh, artanh, tanh
+from ..utils.math_utils import arcosh, arsin_k, artanh, clamp_abs, tanh
 from .manifold import Manifold
 
 
@@ -53,7 +53,7 @@ class PoincareBall(Manifold):
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
 
-        return 2 / (1 -c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(self.max_enorm_eps)
+        return 2 / (1 - c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(self.max_enorm_eps)
 
     def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -317,6 +317,28 @@ class PoincareBall(Manifold):
         dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
         res = 2 * dist_c / sqrt_c
         return res
+
+    def dist2plane(
+        self,
+        x: torch.Tensor,
+        n: torch.Tensor,
+        b: torch.Tensor,
+        c: torch.Tensor,
+        signed: bool = False,
+        scaled: bool = False,
+    ):
+        diff = self.addition(-b, x, c)
+        diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=True).clamp_min(self.max_enorm_eps)
+        sc_diff_a = (diff * n).sum(dim=-1, keepdim=True)
+        if not signed:
+            sc_diff_a = sc_diff_a.abs()
+        a_norm = torch.linalg.norm(n, dim=-1, keepdim=True, ord=2)
+        num = 2.0 * sc_diff_a
+        denom = clamp_abs((1 - c * diff_norm2) * a_norm)
+        distance = arsin_k(num / denom, c)
+        if scaled:
+            distance = distance * a_norm
+        return distance
 
     def expmap(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """

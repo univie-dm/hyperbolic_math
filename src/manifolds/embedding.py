@@ -1,6 +1,7 @@
 import torch
 
-from .manifold import ManifoldParameter, Manifold
+from .manifold import Manifold, ManifoldParameter
+from .poincare import PoincareBall
 
 
 class Embedding(torch.nn.Module):
@@ -12,29 +13,57 @@ class Embedding(torch.nn.Module):
     c: torch.Tensor
     weight: ManifoldParameter
     bias: ManifoldParameter
+    rescale_normal: bool
+    out_downscale: float
 
-    def __init__(self, input_dim: int, output_dim: int, manifold: str, c: float, requires_grad: bool = True):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        manifold: str,
+        c: float,
+        rescale_normal: bool,
+        out_downscale: float,
+        requires_grad: bool = True,
+    ):
         super().__init__()
         self.manifold = manifold
         self.c = torch.tensor(c, dtype=torch.float32)  # Curvature for non-Euclidean manifolds
+        self.rescale_normal = rescale_normal
+        self.out_downscale = out_downscale
 
-        weight = torch.randn(input_dim, output_dim)
-        self.weight = ManifoldParameter(weight, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
+        # Init as transpose to make math easier
+        weight = torch.randn(output_dim, input_dim)
+        self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)  # , manifold=self.manifold, c=self.c
 
-        bias = torch.zeros(output_dim)
+        # Init as transpose to make math easier
+        bias = torch.zeros(output_dim, input_dim)
         self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
 
-    def forward(self, x):
-        # We always need a bias addition, else it's just equivalent to a Euclidean NN
-        # TODO: Alternative bias translation: expmap(ptransp_0(bias, x), x, c) -- Stability??
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # NOTE: Only works for Poincare ball right now
+        # Assume scaled Euclidean inputs and map them to the Poincare ball with
+        x = self.manifold.expmap_0(x, self.c)
+        # Add extra intermediate dimension for broadcasting in dist2plane Möbius addition
+        x = x[:, None, :]
 
-        # Method 1: matvec_mul == expmap_0(W*logmap_0(x))
-        # x = self.manifold.expmap_0(x, self.c)
-        # x = self.manifold.matvec_mul(self.weight, x, self.c)
-        # x = self.manifold.addition(x, self.bias, self.c)
+        # Rescale normal (weight) parameters
+        if self.rescale_normal:
+            conformal_factor = 1 - self.bias.pow(2).sum(dim=-1)
+            scaled_normal = self.weight * conformal_factor.unsqueeze(-1)
+        conformal_factor = 1 - self.bias.pow(2).sum(dim=-1)
+        scaled_normal = self.weight * conformal_factor.unsqueeze(-1)
 
-        # Method 2 - less computation since expmap_0(logmap_0(x)==x), hence theoretically more stable - test in experiments:
-        x = self.manifold.expmap_0(x @ self.weight, self.c)
-        x = self.manifold.addition(x, self.bias, self.c)
+        # Implement linear layer as signed distance to hyperplane
+        assert isinstance(self.manifold, PoincareBall), "Only PoincareBall is supported for now"
+        # TODO: How can I still use this with everything being transposed?
+        # TODO: Why the fuck can't I make the normal a manifold parameter?
+        res = self.manifold.dist2plane(x, scaled_normal, self.bias, self.c, signed=True, scaled=True)
+        res = res.squeeze()
 
-        return x
+        # Rescale distances when using re-scaling of normal parameters
+        if self.rescale_normal:
+            res_scaled = res * 2 / conformal_factor
+
+        # Return downscaled logits
+        return res_scaled * self.out_downscale
