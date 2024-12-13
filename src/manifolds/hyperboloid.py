@@ -13,14 +13,19 @@ class Hyperboloid(Manifold):
     We use the following convention: -x0^2 + x1^2 + ... + xd^2 = -K
 
     c = 1 / K is the hyperbolic curvature.
+    
+    Parameters
+    ----------
+    dtype : torch.dtype
+        Data type that is used for the computations. Sets the tolerances for numerical errors.
     """
 
     def __init__(self):
         super(Hyperboloid, self).__init__()
         self.name = "Hyperboloid"
-        self.eps = {torch.float32: 1e-7, torch.float64: 1e-15}
-        self.min_norm = 1e-15
-        self.max_norm = 1e6
+        
+        self.min_enorm = 2e-15
+        self.max_enorm_eps = self.min_enorm
 
     def minkowski_dot(self, x, y, keepdim=True):
         res = torch.sum(x * y, dim=-1) - 2 * x[..., 0] * y[..., 0]
