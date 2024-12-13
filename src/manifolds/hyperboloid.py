@@ -15,9 +15,9 @@ class Hyperboloid(Manifold):
     c = 1 / K is the hyperbolic curvature.
     
     Parameters
-        ----------
-        dtype : torch.dtype
-            Data type that is used for the computations. Sets the tolerances for numerical errors.
+    ----------
+    dtype : torch.dtype
+        Data type that is used for the computations. Sets the tolerances for numerical errors.
     """
 
     def __init__(self):
