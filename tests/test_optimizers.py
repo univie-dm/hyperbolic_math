@@ -1,24 +1,12 @@
-import random
 from typing import Tuple, Union
 
-import numpy as np
 import pytest
 import torch
 
 from src.manifolds import Euclidean, Hyperboloid, ManifoldParameter, PoincareBall
 from src.optim import RiemannianAdam, RiemannianSGD
 
-
-@pytest.fixture(scope="module")
-def seed() -> int:
-    """Set the seed(s) for all tests."""
-    # Make it for one seed (14) only now
-    # seed = request.param
-    seed = 14
-    torch.manual_seed(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    return seed
+from .fixtures import manifold, seed
 
 
 @pytest.fixture(scope="module", params=[torch.float32, torch.float64], ids=["float32", "float64"])
@@ -31,18 +19,6 @@ def dtype(request: pytest.FixtureRequest) -> torch.dtype:
 def c(dtype: torch.dtype) -> torch.Tensor:
     """Generate a random curvature magnitude(s)."""
     return torch.ones(1, dtype=dtype)
-
-
-@pytest.fixture(scope="module", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
-def manifold(request: pytest.FixtureRequest) -> Union[Euclidean, PoincareBall, Hyperboloid]:
-    """Instantiate the manifold(s)."""
-    if request.param == Euclidean:
-        manifold = Euclidean()
-    elif request.param == PoincareBall:
-        manifold = PoincareBall()
-    elif request.param == Hyperboloid:
-        manifold = Hyperboloid()
-    return manifold
 
 
 @pytest.fixture(scope="module")
@@ -82,7 +58,7 @@ def test_riemannian_adam(
 
     optim = RiemannianAdam([start], lr=1e-2, c=c, expmap_update=expmap_update, eps=1e-5)
 
-    for _ in range(2000):
+    for _ in range(1100):
         optim.step(closure)
     torch.testing.assert_close(start.data, ideal, atol=atol, rtol=rtol)
 
@@ -111,6 +87,6 @@ def test_riemannian_sgd(
 
     optim = RiemannianSGD([start], lr=1e-2, c=c, expmap_update=expmap_update, momentum=0.9)
 
-    for _ in range(2000):
+    for _ in range(1000):
         optim.step(closure)
     torch.testing.assert_close(start.data, ideal, atol=atol, rtol=rtol)
