@@ -126,7 +126,7 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                             new_point = manifold.expmap(-learning_rate * grad, point, self.c)
                         else:
                             # First-order approximation of the update using the retraction mapping
-                            new_point = manifold.retr(-learning_rate * grad, point, self.c)
+                            new_point = manifold.retraction(-learning_rate * grad, point, self.c)
                         point.copy_(new_point)
 
                 if group["stabilize"] is not None and group["step"] % group["stabilize"] == 0:

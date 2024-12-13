@@ -150,9 +150,13 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     # 1. Project onto Tangent space
                     # 2. Update with exponential map
                     if self.expmap_update:
-                        new_point, exp_avg_new = manifold.expmap_ptransp(-learning_rate * direction, point, exp_avg, self.c)
+                        new_point = manifold.expmap(-learning_rate * direction, point, self.c)
+                        exp_avg_new = manifold.ptransp(exp_avg, point, new_point, self.c)
+                        #new_point, exp_avg_new = manifold.expmap_ptransp(-learning_rate * direction, point, exp_avg, self.c)
                     else:
-                        new_point, exp_avg_new = manifold.retr_ptransp(-learning_rate * direction, point, exp_avg, self.c)
+                        new_point = manifold.retraction(-learning_rate * direction, point, self.c)
+                        exp_avg_new = manifold.ptransp(exp_avg, point, new_point, self.c)
+                        #new_point, exp_avg_new = manifold.retr_ptransp(-learning_rate * direction, point, exp_avg, self.c)
                     # use copy only for user facing point
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)

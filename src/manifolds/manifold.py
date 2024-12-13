@@ -41,8 +41,8 @@ class Manifold:
         """Map tangent vector(s) v at the manifold's origin to the manifold. [Exponential map]"""
         raise NotImplementedError
 
-    def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        """Approximate mapping of vector(s) v at manifold point(s) x to the manifold. [Retraction map]"""
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """Approximately map tangent vector(s) v at manifold point(s) x to the manifold. [Retraction map]"""
         raise NotImplementedError
 
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -55,78 +55,22 @@ class Manifold:
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space(s) of
-        manifold point(s) x to the tangent space(s) of manifold point(s) y."""
+           manifold point(s) x to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
 
     def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space of
-        the manifold's origin to the tangent space(s) of manifold point(s) y."""
+           the manifold's origin to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
-
-    def expmap_ptransp(
-        self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Perform an exponential map and vector transport from point :math:`x` with given direction :math:`u`.
-
-        Parameters
-        ----------
-        v : torch.Tensor
-            vector(s) in the tangent space(s) of x
-        x : torch.Tensor
-            PoincareBall point(s)
-        y : torch.Tensor
-            PoincareBall point(s)
-        c : torch.Tensor
-            magnitude of sectional curvature
-
-        Returns
-        -------
-        Tuple[torch.Tensor, torch.Tensor]
-            transported point and vectors
-        """
-        z = self.expmap(v, x, c)
-        y_transp = self.ptransp(y, x, z, c)
-        return z, y_transp
-
-    def retr_ptransp(
-        self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Perform a retraction + vector transport at once.
-
-        Parameters
-        ----------
-        v : torch.Tensor
-            vector(s) in the tangent space(s) of x
-        x : torch.Tensor
-            PoincareBall point(s)
-        y : torch.Tensor
-            PoincareBall point(s)
-        c : torch.Tensor
-            magnitude of sectional curvature
-
-        Returns
-        -------
-        Tuple[torch.Tensor, torch.Tensor]
-            transported point and vectors
-
-        Notes
-        -----
-        Sometimes this is a far more optimal way to preform retraction + vector transport
-        """
-        z = self.retr(v, x, c)
-        y_transp = self.ptransp(y, x, z, c)
-        return z, y_transp
 
     def tangent_inner(self, u: torch.Tensor, v: Union[torch.Tensor, None], x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Compute the inner product(s) between tangent vectors u and v of the tangent space(s)
-        at manifold point(s) x with respect to the Riemannian metric of the manifold."""
+           at manifold point(s) x with respect to the Riemannian metric of the manifold."""
         raise NotImplementedError
 
     def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """Compute the norm(s) of tangent vector(s) v of the tangent space(s) at manifold point(s) x
-        with respect to the Riemannian metric of the manifold."""
+           with respect to the Riemannian metric of the manifold."""
         raise NotImplementedError
 
     def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:

@@ -16,9 +16,9 @@ class PoincareBall(Manifold):
     Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
 
     Parameters
-        ----------
-        dtype : torch.dtype
-            Data type that is used for the computations. Sets the tolerances for numerical errors.
+    ----------
+    dtype : torch.dtype
+        Data type that is used for the computations. Sets the tolerances for numerical errors.
     """
 
     def __init__(self):
@@ -52,8 +52,10 @@ class PoincareBall(Manifold):
         ---------
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-
-        return 2 / (1 - c * x.pow(2).sum(dim=-1, keepdim=True)).clamp_min(self.max_enorm_eps)
+        x2 = x.pow(2).sum(dim=-1, keepdim=True)
+        denom = (1.0 - c * x2).clamp_min(2 * c.sqrt() * self.max_enorm_eps - c * self.max_enorm_eps ** 2)
+        res = 2 / denom
+        return res
 
     def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -456,9 +458,9 @@ class PoincareBall(Manifold):
             # print(f"expmap_0: Norm clipping applied")
         return res
 
-    def retr(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
-        First-order approximation of the exponential map for vector(s) v at manifold point(s) x.
+        First-order approximation of the exponential map for vector(s) v at PoincareBall point(s) x.
         [Retraction map]
 
         Parameters
@@ -480,10 +482,10 @@ class PoincareBall(Manifold):
         Gary Bécigneul and Octavian Ganea. "Riemannian adaptive optimization methods."
             International Conference on Learning Representations (2019).
         """
-        # always assume u is scaled properly
-        approx = v + x
-
-        return self.proj(approx, c=c)
+        # always assume v is scaled properly
+        approx = x + v
+        res = self.proj(approx, c=c)
+        return res
 
     def logmap(self, y: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -680,8 +682,11 @@ class PoincareBall(Manifold):
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        uv = (u * v).sum(dim=-1, keepdim=True)
-        res = uv * self._lambda(x, c) ** 2
+        if v is u:
+            res = u.pow(2)
+        else:
+            res = u * v
+        res = res.sum(dim=-1, keepdim=True) * self._lambda(x, c) ** 2
         return res
 
     def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -771,6 +776,7 @@ class PoincareBall(Manifold):
         ---------
         Precision depends on c
         """
+        # BUG: Must clamp like them to get their results, can't use enorm here
         if x.dtype == torch.float32:
             eps = 4e-3
         else:
