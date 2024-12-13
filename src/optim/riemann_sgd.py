@@ -1,7 +1,6 @@
 import torch.optim.optimizer
 
 from ..manifolds import ManifoldParameter
-
 from .mixin import OptimMixin
 
 __all__ = ["RiemannianSGD"]
@@ -110,13 +109,10 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                             grad = momentum_buffer
                         # we have all the things projected
                         if self.expmap_update:
-                            new_point, new_momentum_buffer = manifold.expmap_ptransp(
-                                -learning_rate * grad, point, momentum_buffer, self.c
-                            )
+                            new_point = manifold.expmap(-learning_rate * grad, point, self.c)
                         else:
-                            new_point, new_momentum_buffer = manifold.retr_ptransp(
-                                -learning_rate * grad, point, momentum_buffer, self.c
-                            )
+                            new_point = manifold.retraction(-learning_rate * grad, point, self.c)
+                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, self.c)
                         momentum_buffer.copy_(new_momentum_buffer)
                         # use copy only for user facing point
                         point.copy_(new_point)
