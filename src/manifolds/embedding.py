@@ -32,7 +32,7 @@ class Embedding(torch.nn.Module):
     ):
         super().__init__()
         self.manifold = manifold
-        self.c = torch.tensor(c, dtype=torch.float32)  # Curvature for non-Euclidean manifolds
+        self.register_buffer("c", torch.tensor(c, dtype=torch.float32))  # Curvature for non-Euclidean manifolds
 
         self._sanity_checks(forward_method)
         # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
