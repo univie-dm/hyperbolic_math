@@ -99,10 +99,13 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad = point.grad
                     if grad is None:
                         continue
-                    if isinstance(point, ManifoldParameter):
-                        manifold = point.manifold
-                    else:
+
+                    # Define flag to check if the point is Euclidean or Hyperbolic
+                    is_euclidean_param = not isinstance(point, ManifoldParameter)
+                    if is_euclidean_param:
                         manifold = self._default_manifold
+                    else:
+                        manifold = point.manifold
 
                     if grad.is_sparse:
                         raise RuntimeError(
@@ -129,9 +132,15 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad.add_(point, alpha=weight_decay)
                     grad = manifold.egrad2rgrad(grad, point, self.c)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
-                    exp_avg_sq.mul_(betas[1]).add_(
-                        manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c), alpha=1 - betas[1]
-                    )
+
+                    if is_euclidean_param:
+                        exp_avg_sq_update = grad.pow(2)
+                    else:
+                        # Riemannian update must use squared tangent norm at current manifold point
+                        exp_avg_sq_update = manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c)
+                    # exp_avg_sq.mul_(betas[1]).add_(grad.pow(2), alpha=1 - betas[1])
+                    exp_avg_sq.mul_(betas[1]).add_(exp_avg_sq_update, alpha=1 - betas[1])
+
                     bias_correction1 = 1 - betas[0] ** state["step"]
                     bias_correction2 = 1 - betas[1] ** state["step"]
                     if amsgrad:
