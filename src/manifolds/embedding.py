@@ -13,8 +13,6 @@ class Embedding(torch.nn.Module):
     c: torch.Tensor
     weight: ManifoldParameter
     bias: ManifoldParameter
-    rescale_normal: bool
-    out_downscale: float
 
     def __init__(
         self,
@@ -22,48 +20,50 @@ class Embedding(torch.nn.Module):
         output_dim: int,
         manifold: str,
         c: float,
-        rescale_normal: bool,
-        out_downscale: float,
         requires_grad: bool = True,
+        forward_method: str = "dist2hyperplane",
     ):
         super().__init__()
         self.manifold = manifold
         self.c = torch.tensor(c, dtype=torch.float32)  # Curvature for non-Euclidean manifolds
-        self.rescale_normal = rescale_normal
-        self.out_downscale = out_downscale
+        self.forward_method = forward_method
 
-        # Init as transpose to make math easier
-        weight = torch.randn(output_dim, input_dim)
-        self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)  # , manifold=self.manifold, c=self.c
+        weight = torch.randn(input_dim, output_dim)
+        self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        # Init as transpose to make math easier
-        bias = torch.zeros(output_dim, input_dim)
+        bias = torch.zeros(input_dim)
         self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # NOTE: Only works for Poincare ball right now
-        # Assume scaled Euclidean inputs and map them to the Poincare ball with
-        x = self.manifold.expmap_0(x, self.c)
-        # Add extra intermediate dimension for broadcasting in dist2plane Möbius addition
-        x = x[:, None, :]
+        assert self.manifold.is_in_manifold(self.bias, self.c) # check if bias is in manifold
 
-        # Rescale normal (weight) parameters
-        if self.rescale_normal:
-            conformal_factor = 1 - self.bias.pow(2).sum(dim=-1)
-            scaled_normal = self.weight * conformal_factor.unsqueeze(-1)
-        conformal_factor = 1 - self.bias.pow(2).sum(dim=-1)
-        scaled_normal = self.weight * conformal_factor.unsqueeze(-1)
+        # Method 1: forward pass via dist2hyperplane - only works for PoincareBall
+        if self.forward_method == "dist2hyperplane" and isinstance(self.manifold, PoincareBall):
+            x = self.manifold.expmap_0(x, self.c)
+            res = self.manifold.dist2hyperplane(x, self.weight, self.bias, self.c, signed=True, scaled=True)
+            #TODO: Technically we are missing some scalings here with sign(.) * ||weights||
 
-        # Implement linear layer as signed distance to hyperplane
-        assert isinstance(self.manifold, PoincareBall), "Only PoincareBall is supported for now"
-        # TODO: How can I still use this with everything being transposed?
-        # TODO: Why the fuck can't I make the normal a manifold parameter?
-        res = self.manifold.dist2plane(x, scaled_normal, self.bias, self.c, signed=True, scaled=True)
-        res = res.squeeze()
+        # Method 2: forward pass via dist2hyperplane++ - only works for PoincareBall
+        if self.forward_method == "dist2hyperplane++" and isinstance(self.manifold, PoincareBall):
+            x = self.manifold.expmap_0(x, self.c)
+            res = self.manifold.dist2hyperplane_pp(x, self.weight, self.bias, self.c, signed=True, scaled=True)
 
-        # Rescale distances when using re-scaling of normal parameters
-        if self.rescale_normal:
-            res_scaled = res * 2 / conformal_factor
+        # Method 3 - forward pass via tangent space matrix-vector mult. - more stable than "indirect_matvec_mul"
+        elif self.forward_method == "direct_matvec_mul":
+            x = self.manifold.expmap_0(x @ self.weight, self.c)
+            res = self.manifold.addition(x, self.bias, self.c)
 
-        # Return downscaled logits
-        return res_scaled * self.out_downscale
+        # Method 4 - forward pass via tangent space matrix-vector mult. but with logmap/expmap transforms
+        elif self.forward_method == "indirect_matvec_mul":
+            x = self.manifold.expmap_0(x, self.c)
+            x = self.manifold.matvec_mul(self.weight, x, self.c)
+            res = self.manifold.addition(x, self.bias, self.c)
+        
+        # Method 5 - forward pass as in hyperbolic neural networks
+        elif self.forward_method == "hnn_matvec_mul":
+            x = self.manifold.expmap_0(x @ self.weight, self.c)
+            x = self.manifold.matvec_mul(self.weight, x, self.c)
+            ebias = self.manifold.ptransp_0(self.manifold.logmap_0(self.bias, self.c), x, self.c)
+            res = self.manifold.expmap(ebias, x, self.c)
+
+        return res

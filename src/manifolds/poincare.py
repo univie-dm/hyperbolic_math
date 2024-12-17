@@ -4,7 +4,7 @@ import traceback
 
 import torch
 
-from ..utils.math_utils import arcosh, arsin_k, artanh, clamp_abs, tanh
+from ..utils.math_utils import arcosh, artanh, tanh, arsinh
 from .manifold import Manifold
 
 
@@ -24,8 +24,8 @@ class PoincareBall(Manifold):
     def __init__(self):
         super().__init__()
         self.name = "PoincareBall"
-        self.min_enorm = 2e-15
-        self.max_enorm_eps = self.min_enorm
+        self.min_enorm = 1e-15
+        self.max_enorm_eps = 5e-15
 
     def _lambda(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -128,6 +128,7 @@ class PoincareBall(Manifold):
         Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
 
         Stability
+        TODO
         ---------
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
@@ -212,7 +213,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
+        TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
         ||x||-> 0 implies that ||Mx|| -> 0 for reasonably bounded M
         ||Mx|| -> 0 may cause problems if ||x|| is very large. How to deal with this?
         """
@@ -243,6 +244,63 @@ class PoincareBall(Manifold):
             res = torch.where(condition, res_0, res_c)
         return res
 
+    def dist2hyperplane(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
+                        signed: bool = False, scaled: bool = False) -> torch.Tensor:
+        """
+        Compute the geodesic distance(s) of PoincareBall point(s) x from/to the PoincareBall origin.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            PoincareBall point(s)
+        c : torch.Tensor
+            magnitude of sectional curvature
+
+        Returns
+        -------
+        res : torch.Tensor
+            The geodesic distance(s) of x from/to the PoincareBall origin
+
+        References
+        ----------
+        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+            Advances in neural information processing systems 31 (2018).
+        """
+        sqrt_c = c.sqrt()
+        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        sub = self.addition(-p, x, c)
+        msub = sub @ m
+        if not signed:
+            msub = msub.abs()
+        num = 2.0 * sqrt_c * msub
+        sub_norm2 = sub.pow(2).sum(dim=-1, keepdim=True)
+        denom = m_norm * (1 - c * sub_norm2).clamp_min(2 * sqrt_c * self.max_enorm_eps - c * self.max_enorm_eps ** 2)
+        res = arsinh(num / denom) / sqrt_c
+        if scaled:
+            res = res * m_norm
+        return res
+
+    # def dist2hyperplane_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
+    #                        signed: bool = False, scaled: bool = False) -> torch.Tensor:
+    #     z_norm = z.norm(dim=-2, keepdim=True, p=2)
+    #     z_unit = z / z_norm.clamp_min(1e-15)
+
+    #     x2 = x.pow(2).sum(dim=-1, keepdim=True)
+
+    #     distance = (
+    #         arsin_k(
+    #             2 / (1 + k * p.pow(2).sum(dim=-2, keepdim=True)).clamp_min(1e-15) * (
+    #                 torch.matmul(x, z_unit)
+    #                 - (1 + 2 * k * torch.matmul(x, p) - k * x2) 
+    #                 / (1 + k * x2).clamp_min(1e-15)
+    #                     * (p * z_unit).sum(dim=-2, keepdim=True)
+    #             ), 
+    #             k
+    #             )
+    #     )
+
+    #     return 2 * distance * z_norm
+
     def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall points x and y.
@@ -271,7 +329,7 @@ class PoincareBall(Manifold):
         ---------
         Mobius-dist is more stable for boundary points; Metric-tensor-induced-dist is 75% faster
         """
-        version = "mobius_symmetric"
+        version = "metric_tensor"
         if version == "mobius":
             # Mobius-dist
             sqrt_c = c.sqrt()
@@ -320,28 +378,6 @@ class PoincareBall(Manifold):
         res = 2 * dist_c / sqrt_c
         return res
 
-    def dist2plane(
-        self,
-        x: torch.Tensor,
-        n: torch.Tensor,
-        b: torch.Tensor,
-        c: torch.Tensor,
-        signed: bool = False,
-        scaled: bool = False,
-    ):
-        diff = self.addition(-b, x, c)
-        diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=True).clamp_min(self.max_enorm_eps)
-        sc_diff_a = (diff * n).sum(dim=-1, keepdim=True)
-        if not signed:
-            sc_diff_a = sc_diff_a.abs()
-        a_norm = torch.linalg.norm(n, dim=-1, keepdim=True, ord=2)
-        num = 2.0 * sc_diff_a
-        denom = clamp_abs((1 - c * diff_norm2) * a_norm)
-        distance = arsin_k(num / denom, c)
-        if scaled:
-            distance = distance * a_norm
-        return distance
-
     def expmap(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
         Map tangent vector(s) v at PoincareBall point(s) x to the PoincareBall.
@@ -368,13 +404,13 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
             since tanh(z) ~ z for small z.
-        #TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
+        TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
             lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
-        #TODO stability of addition
+        TODO stability of addition
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = c.sqrt() * v_norm
@@ -432,7 +468,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
             since tanh(z) ~ z for small z.
         """
@@ -513,7 +549,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
             since artanh(z) ~ z for small z.
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
@@ -562,7 +598,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
             since artanh(z) ~ z for small z.
         """
@@ -614,7 +650,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
-        ...gyr... stability #TODO
+        TODO: ...gyr... stability
         """
         conformal_frac = self._lambda(x, c) / self._lambda(y, c)
         res = conformal_frac * self._gyration(y, -x, v, c)
@@ -774,6 +810,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
+        TODO:
         Precision depends on c
         """
         # BUG: Must clamp like them to get their results, can't use enorm here
@@ -820,6 +857,5 @@ class PoincareBall(Manifold):
     #     return sqrtK * torch.cat([K + sqnorm, 2 * sqrtK * x], dim=1) / (K - sqnorm)
 
     # mobius_fn
-    # dist2plane
     # mobius_pointwise_mul
     # geodesic_unit
