@@ -28,9 +28,9 @@ class Embedding(torch.nn.Module):
         output_dim: int,
         manifold: Manifold,
         c: float,
-        dtype: Literal["float32", "float64"] = "float32",
-        requires_grad: bool = True,
+        dtype: Literal["float32", "float64"],
         forward_method: ForwardPassType = "dist2hyperplane",
+        requires_grad: bool = True,
     ):
         super().__init__()
         # Type upcasting for 32-bit Euclidean features will happen automatically in the forward pass

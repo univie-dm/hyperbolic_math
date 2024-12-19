@@ -5,8 +5,6 @@ import torch.optim
 from ..manifolds import ManifoldParameter
 from .mixin import OptimMixin
 
-# ManifoldTensor
-
 
 __all__ = ["RiemannianAdam"]
 
@@ -99,7 +97,10 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad = point.grad
                     if grad is None:
                         continue
-                    if isinstance(point, ManifoldParameter):
+
+                    # Flag for hyperbolic parameters
+                    param_is_hyperbolic = isinstance(point, ManifoldParameter)
+                    if param_is_hyperbolic:
                         manifold = point.manifold
                     else:
                         manifold = self._default_manifold
@@ -129,9 +130,15 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad.add_(point, alpha=weight_decay)
                     grad = manifold.egrad2rgrad(grad, point, self.c)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
-                    exp_avg_sq.mul_(betas[1]).add_(
-                        manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c), alpha=1 - betas[1]
-                    )
+
+                    if param_is_hyperbolic:
+                        # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
+                        exp_avg_sq_new = manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c)
+                    else:
+                        # Euclidean parameter: Compute grad^2 parameter-wise
+                        exp_avg_sq_new = grad.pow(2)
+
+                    exp_avg_sq.mul_(betas[1]).add_(exp_avg_sq_new, alpha=1 - betas[1])
                     bias_correction1 = 1 - betas[0] ** state["step"]
                     bias_correction2 = 1 - betas[1] ** state["step"]
                     if amsgrad:
