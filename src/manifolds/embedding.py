@@ -20,6 +20,7 @@ class Embedding(torch.nn.Module):
     weight: ManifoldParameter
     bias: ManifoldParameter
     forward_method: ForwardPassType
+    dtype: torch.dtype
 
     def __init__(
         self,
@@ -27,21 +28,25 @@ class Embedding(torch.nn.Module):
         output_dim: int,
         manifold: Manifold,
         c: float,
+        dtype: Literal["float32", "float64"] = "float32",
         requires_grad: bool = True,
         forward_method: ForwardPassType = "dist2hyperplane",
     ):
         super().__init__()
+        # Type upcasting for 32-bit Euclidean features will happen automatically in the forward pass
+        self.dtype = torch.float32 if dtype == "float32" else torch.float64
         self.manifold = manifold
-        self.register_buffer("c", torch.tensor(c, dtype=torch.float32))  # Curvature for non-Euclidean manifolds
+        # Curvature for non-Euclidean manifolds
+        self.register_buffer("c", torch.tensor(c, dtype=self.dtype))
 
         self._sanity_checks(forward_method)
         # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
         self.forward_method = getattr(self, f"forward_{forward_method}")
 
-        weight = torch.randn(input_dim, output_dim)
+        weight = torch.randn(input_dim, output_dim, dtype=self.dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        bias = torch.zeros(input_dim)
+        bias = torch.zeros(input_dim, dtype=self.dtype)
         self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold, c=self.c)
 
     def _sanity_checks(self, forward_method: ForwardPassType) -> None:
