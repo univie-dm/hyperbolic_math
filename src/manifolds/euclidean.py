@@ -286,10 +286,7 @@ class Euclidean(Manifold):
         res : torch.Tensor
             The tangent inner product(s) of u and v
         """
-        if v is u:
-            res = u.pow(2)
-        else:
-            res = u * v
+        res = u * v
         res = res.sum(dim=-1, keepdim=True)
         return res
 
