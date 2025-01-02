@@ -29,4 +29,4 @@ def delta_hyp(dismat):
     col = dismat[:, p][:, np.newaxis]
     XY_p = 0.5 * (row + col - dismat)
     maxmin = np.max(np.minimum(XY_p[:, :, None], XY_p[None, :, :]), axis=1)
-    return np.max(maxmin - XY_p)
+    return np.mean(maxmin - XY_p)
