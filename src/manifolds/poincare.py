@@ -204,7 +204,7 @@ class PoincareBall(Manifold):
         Returns
         -------
         res : torch.Tensor
-            The product(s) of m and x
+            The product(s) of m and x defined as expmap_0(m * logmap_0(x))
 
         References
         ----------
@@ -247,24 +247,7 @@ class PoincareBall(Manifold):
     def dist2hyperplane(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
                         signed: bool = False, scaled: bool = False) -> torch.Tensor:
         """
-        Compute the geodesic distance(s) of PoincareBall point(s) x from/to the PoincareBall origin.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            PoincareBall point(s)
-        c : torch.Tensor
-            magnitude of sectional curvature
-
-        Returns
-        -------
-        res : torch.Tensor
-            The geodesic distance(s) of x from/to the PoincareBall origin
-
-        References
-        ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
-            Advances in neural information processing systems 31 (2018).
+        #TODO
         """
         sqrt_c = c.sqrt()
         m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
@@ -278,6 +261,25 @@ class PoincareBall(Manifold):
         res = arsinh(num / denom) / sqrt_c
         if scaled:
             res = res * m_norm
+        return res
+    
+    def dist2hyperplane_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        #TODO
+        """
+        # Perform matrix-vector multiplication in the tangent space
+        # The row vectors of m are the hyperplane normals
+        sub = self.addition(-p, x, c)
+        msub = sub @ m
+        # Determine which side of the hyperplanes the point(s) on
+        orientation = torch.sign(msub)
+        # Get the lengths of the hyperplane normals
+        m_norm = self.tangent_norm(m.T, p, c).T
+        # Compute the geodesic distance(s) of the point(s) to the hyperplane
+        sqrt_c = c.sqrt()
+        denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        dist2hyp = arsinh(self._lambda(sub, c) * sqrt_c * msub.abs() / denom) / sqrt_c
+        res = orientation * dist2hyp * m_norm
         return res
 
     # def dist2hyperplane_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
