@@ -243,7 +243,7 @@ class PoincareBall(Manifold):
             res = torch.where(condition, res_0, res_c)
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str="metric_tensor") -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall points x and y.
         [Mobius version]
@@ -256,6 +256,11 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         c : torch.Tensor
             magnitude of sectional curvature
+        version : str
+            version of the geodesic distance to compute (default: "metric_tensor")
+            mobius: Mobius-dist
+            mobius_symmetric: Symmetrized mobius-dist
+            metric_tensor: Metric-tensor-induced-dist
 
         Returns
         -------
@@ -271,7 +276,6 @@ class PoincareBall(Manifold):
         ---------
         Mobius-dist is more stable for boundary points; Metric-tensor-induced-dist is 75% faster
         """
-        version = "mobius_symmetric"
         if version == "mobius":
             # Mobius-dist
             sqrt_c = c.sqrt()
