@@ -4,7 +4,7 @@ import traceback
 
 import torch
 
-from ..utils.math_utils import arcosh, artanh, tanh
+from ..utils.math_utils import arcosh, artanh, tanh, arsinh
 from .manifold import Manifold
 
 
@@ -24,8 +24,8 @@ class PoincareBall(Manifold):
     def __init__(self):
         super().__init__()
         self.name = "PoincareBall"
-        self.min_enorm = 2e-15
-        self.max_enorm_eps = self.min_enorm
+        self.min_enorm = 1e-15
+        self.max_enorm_eps = 5e-15
 
     def _lambda(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -128,6 +128,7 @@ class PoincareBall(Manifold):
         Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
 
         Stability
+        TODO
         ---------
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
@@ -203,7 +204,7 @@ class PoincareBall(Manifold):
         Returns
         -------
         res : torch.Tensor
-            The product(s) of m and x
+            The product(s) of m and x defined as expmap_0(m * logmap_0(x))
 
         References
         ----------
@@ -212,7 +213,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
+        TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
         ||x||-> 0 implies that ||Mx|| -> 0 for reasonably bounded M
         ||Mx|| -> 0 may cause problems if ||x|| is very large. How to deal with this?
         """
@@ -242,6 +243,65 @@ class PoincareBall(Manifold):
             res_0 = torch.zeros(1, dtype=res_c.dtype, device=res_c.device)
             res = torch.where(condition, res_0, res_c)
         return res
+
+    def dist2hyperplane(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
+                        signed: bool = False, scaled: bool = False) -> torch.Tensor:
+        """
+        #TODO
+        """
+        sqrt_c = c.sqrt()
+        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        sub = self.addition(-p, x, c)
+        msub = sub @ m
+        if not signed:
+            msub = msub.abs()
+        num = 2.0 * sqrt_c * msub
+        sub_norm2 = sub.pow(2).sum(dim=-1, keepdim=True)
+        denom = m_norm * (1 - c * sub_norm2).clamp_min(2 * sqrt_c * self.max_enorm_eps - c * self.max_enorm_eps ** 2)
+        res = arsinh(num / denom) / sqrt_c
+        if scaled:
+            res = res * m_norm
+        return res
+    
+    def dist2hyperplane_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        #TODO
+        """
+        # Perform matrix-vector multiplication in the tangent space
+        # The row vectors of m are the hyperplane normals
+        sub = self.addition(-p, x, c)
+        msub = sub @ m
+        # Determine which side of the hyperplanes the point(s) on
+        orientation = torch.sign(msub)
+        # Get the lengths of the hyperplane normals
+        m_norm = self.tangent_norm(m.T, p, c).T
+        # Compute the geodesic distance(s) of the point(s) to the hyperplane
+        sqrt_c = c.sqrt()
+        denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        dist2hyp = arsinh(self._lambda(sub, c) * sqrt_c * msub.abs() / denom) / sqrt_c
+        res = orientation * dist2hyp * m_norm
+        return res
+
+    # def dist2hyperplane_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, c: torch.Tensor,
+    #                        signed: bool = False, scaled: bool = False) -> torch.Tensor:
+    #     z_norm = z.norm(dim=-2, keepdim=True, p=2)
+    #     z_unit = z / z_norm.clamp_min(1e-15)
+
+    #     x2 = x.pow(2).sum(dim=-1, keepdim=True)
+
+    #     distance = (
+    #         arsin_k(
+    #             2 / (1 + k * p.pow(2).sum(dim=-2, keepdim=True)).clamp_min(1e-15) * (
+    #                 torch.matmul(x, z_unit)
+    #                 - (1 + 2 * k * torch.matmul(x, p) - k * x2) 
+    #                 / (1 + k * x2).clamp_min(1e-15)
+    #                     * (p * z_unit).sum(dim=-2, keepdim=True)
+    #             ), 
+    #             k
+    #             )
+    #     )
+
+    #     return 2 * distance * z_norm
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str="metric_tensor") -> torch.Tensor:
         """
@@ -363,13 +423,13 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
             since tanh(z) ~ z for small z.
-        #TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
+        TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
             lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
-        #TODO stability of addition
+        TODO stability of addition
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = c.sqrt() * v_norm
@@ -427,7 +487,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
             since tanh(z) ~ z for small z.
         """
@@ -508,7 +568,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
             since artanh(z) ~ z for small z.
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
@@ -557,7 +617,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        #TODO: check which clamping works better
+        TODO: check which clamping works better
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
             since artanh(z) ~ z for small z.
         """
@@ -609,7 +669,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
-        ...gyr... stability #TODO
+        TODO: ...gyr... stability
         """
         conformal_frac = self._lambda(x, c) / self._lambda(y, c)
         res = conformal_frac * self._gyration(y, -x, v, c)
@@ -769,6 +829,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
+        TODO:
         Precision depends on c
         """
         # BUG: Must clamp like them to get their results, can't use enorm here
@@ -815,6 +876,5 @@ class PoincareBall(Manifold):
     #     return sqrtK * torch.cat([K + sqnorm, 2 * sqrtK * x], dim=1) / (K - sqnorm)
 
     # mobius_fn
-    # dist2plane
     # mobius_pointwise_mul
     # geodesic_unit

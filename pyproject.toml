@@ -30,3 +30,9 @@ include = ["hyperbolic_test*", "manifolds*", "utils*"]
 addopts = "-ra -q"
 testpaths = ["tests"]
 pythonpath = "src"
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "pytest>=8.3.3"
+]
