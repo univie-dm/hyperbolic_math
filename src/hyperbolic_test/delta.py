@@ -15,7 +15,6 @@ def get_delta(embeddings, sample_size=1500):
 
     relative_delta = 2*delta / diam
     e = np.finfo(float).eps
-
     best_possible_delta = (8*(1-e)**2)/((1-(1-e)**2)**2)
     best_possible_delta = math.acosh(best_possible_delta+1)
     best_possible_delta = 2*math.log(1+2**0.5)/best_possible_delta
