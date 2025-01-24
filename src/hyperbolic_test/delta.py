@@ -15,7 +15,6 @@ def get_delta(embeddings, sample_size=1500):
 
     relative_delta = 2*delta / diam
     e = np.finfo(float).eps
-
     best_possible_delta = (8*(1-e)**2)/((1-(1-e)**2)**2)
     best_possible_delta = math.acosh(best_possible_delta+1)
     best_possible_delta = 2*math.log(1+2**0.5)/best_possible_delta
@@ -29,4 +28,4 @@ def delta_hyp(dismat):
     col = dismat[:, p][:, np.newaxis]
     XY_p = 0.5 * (row + col - dismat)
     maxmin = np.max(np.minimum(XY_p[:, :, None], XY_p[None, :, :]), axis=1)
-    return np.max(maxmin - XY_p)
+    return np.mean(maxmin - XY_p)

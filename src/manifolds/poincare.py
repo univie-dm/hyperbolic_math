@@ -303,7 +303,7 @@ class PoincareBall(Manifold):
 
     #     return 2 * distance * z_norm
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str="metric_tensor") -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall points x and y.
         [Mobius version]
@@ -316,6 +316,9 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         c : torch.Tensor
             magnitude of sectional curvature
+        version : str
+            version of the geodesic distance to compute (default: "metric_tensor")
+            ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
 
         Returns
         -------
@@ -329,9 +332,8 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        Mobius-dist is more stable for boundary points; Metric-tensor-induced-dist is 75% faster
+        Mobius-dist version is more stable for boundary points, but the Metric-tensor-induced-dist is 75% faster.
         """
-        version = "metric_tensor"
         if version == "mobius":
             # Mobius-dist
             sqrt_c = c.sqrt()
@@ -352,9 +354,11 @@ class PoincareBall(Manifold):
             res = 1 + 2 * c * xy_diff_sqnorm / ((1 - c * x_sqnorm) * (1 - c * y_sqnorm))
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
 
-    def dist_0(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, c: torch.Tensor, version: str="metric_tensor") -> torch.Tensor:
         """
         Compute the geodesic distance(s) of PoincareBall point(s) x from/to the PoincareBall origin.
 
@@ -364,6 +368,9 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         c : torch.Tensor
             magnitude of sectional curvature
+        version : str
+            version of the geodesic distance to compute (default: "metric_tensor")
+            ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
 
         Returns
         -------
@@ -375,9 +382,19 @@ class PoincareBall(Manifold):
         Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
         """
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
+        if version in ["mobius", "mobius_symmetric"]:
+            # Mobius-dist/Symmetrized mobius-dist
+            sqrt_c = c.sqrt()
+            dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
+            res = 2 * dist_c / sqrt_c
+        elif version == "metric_tensor":
+            # Metric-tensor-induced-dist
+            x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+            res = 1 + 2 * c * x_sqnorm / (1 - c * x_sqnorm)
+            condition = res < 1 + self.min_enorm
+            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
 
     def expmap(self, v: torch.Tensor, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
