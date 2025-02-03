@@ -307,28 +307,7 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
-        if version == "mobius":
-            # Mobius-dist
-            sqrt_c = self.c.sqrt()
-            dist_c = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
-            res = 2 * dist_c / sqrt_c
-        elif version == "mobius_symmetric":
-            # TODO check if this is algebraically allowed, numerically OK
-            # Symmetrized mobius-dist
-            sqrt_c = self.c.sqrt()
-            dist_c_1 = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
-            dist_c_2 = artanh(sqrt_c * self.addition(-y, x).norm(p=2, dim=-1, keepdim=True))
-            res = (dist_c_1 + dist_c_2) / sqrt_c
-        elif version == "metric_tensor":
-            # Metric-tensor-induced-dist
-            x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-            y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
-            xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
-            res = 1 + 2 * self.c * xy_diff_sqnorm / ((1 - self.c * x_sqnorm) * (1 - self.c * y_sqnorm))
-            condition = res < 1 + self.min_enorm
-            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
-        else:
-            raise ValueError(f"Unknown version: {version}")
+        res = dist_compiled(x, y, self.c, version)
         return res
 
     def dist_0(self, x: torch.Tensor, version: str="mobius") -> torch.Tensor:
@@ -357,19 +336,7 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
-        if version in ["mobius", "mobius_symmetric"]:
-            # Mobius-dist/Symmetrized mobius-dist
-            sqrt_c = self.c.sqrt()
-            dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
-            res = 2 * dist_c / sqrt_c
-        elif version == "metric_tensor":
-            # Metric-tensor-induced-dist
-            x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-            res = 1 + 2 * self.c * x_sqnorm / (1 - self.c * x_sqnorm)
-            condition = res < 1 + self.min_enorm
-            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
-        else:
-            raise ValueError(f"Unknown version: {version}")
+        res = dist_0_compiled(x, self.c, version)
         return res
 
     def expmap(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -820,3 +787,53 @@ class PoincareBall(Manifold):
     # mobius_fn
     # mobius_pointwise_mul
     # geodesic_unit
+
+@torch.jit.script
+def dist_compiled(self, x: torch.Tensor, y: torch.Tensor,
+                  c: torch.Tensor, version: str) -> torch.Tensor:
+    """
+    Script compiled version of the dist method.
+    """
+    if version == "mobius":
+        # Mobius-dist
+        sqrt_c = c.sqrt()
+        dist_c = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
+        res = 2 * dist_c / sqrt_c
+    elif version == "mobius_symmetric":
+        # TODO check if this is algebraically allowed, numerically OK
+        # Symmetrized mobius-dist
+        sqrt_c = c.sqrt()
+        dist_c_1 = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
+        dist_c_2 = artanh(sqrt_c * self.addition(-y, x).norm(p=2, dim=-1, keepdim=True))
+        res = (dist_c_1 + dist_c_2) / sqrt_c
+    elif version == "metric_tensor":
+        # Metric-tensor-induced-dist
+        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+        y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
+        xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
+        res = 1 + 2 * c * xy_diff_sqnorm / ((1 - c * x_sqnorm) * (1 - c * y_sqnorm))
+        condition = res < 1 + self.min_enorm
+        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
+    else:
+        raise ValueError(f"Unknown version: {version}")
+    return res
+
+@torch.jit.script
+def dist_0_compiled(self, x: torch.Tensor, c: torch.Tensor, version: str) -> torch.Tensor:
+    """
+    Script compiled version of the dist_0 method.
+    """
+    if version in ["mobius", "mobius_symmetric"]:
+        # Mobius-dist/Symmetrized mobius-dist
+        sqrt_c = c.sqrt()
+        dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
+        res = 2 * dist_c / sqrt_c
+    elif version == "metric_tensor":
+        # Metric-tensor-induced-dist
+        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+        res = 1 + 2 * c * x_sqnorm / (1 - c * x_sqnorm)
+        condition = res < 1 + self.min_enorm
+        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
+    else:
+        raise ValueError(f"Unknown version: {version}")
+    return res
