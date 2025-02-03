@@ -1,17 +1,13 @@
-from typing import Union
-
 import torch
 
+from typing import Union
 from ..manifolds import Euclidean
 
 
 class OptimMixin:
     _default_manifold = Euclidean()
 
-    def __init__(self, *args, c: torch.Tensor, expmap_update: bool, stabilize: Union[int, None] = None, **kwargs):
-        if c.numel() != 1:
-            raise ValueError(f"Curvature {c} must be a scalar tensor.")
-        self.c = c
+    def __init__(self, *args, expmap_update: bool, stabilize: Union[int, None] = None, **kwargs):
         self.expmap_update = expmap_update
         self._stabilize = stabilize
         super().__init__(*args, **kwargs)

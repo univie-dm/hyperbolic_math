@@ -1,7 +1,8 @@
 import torch.optim.optimizer
 
-from ..manifolds import ManifoldParameter
 from .mixin import OptimMixin
+from ..manifolds import ManifoldParameter
+
 
 __all__ = ["RiemannianSGD"]
 
@@ -41,7 +42,6 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
         self,
         params,
         lr: float,
-        c: torch.Tensor,
         momentum: float = 0,
         dampening: float = 0,
         weight_decay: float = 0,
@@ -65,7 +65,7 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
         )
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super().__init__(params, defaults, c=c, expmap_update=expmap_update, stabilize=stabilize)
+        super().__init__(params, defaults, expmap_update=expmap_update, stabilize=stabilize)
 
     def step(self, closure=None):
         loss = None
@@ -99,7 +99,7 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                         manifold = self._default_manifold
 
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, self.c)
+                    grad = manifold.egrad2rgrad(grad, point)
                     if momentum > 0:
                         momentum_buffer = state["momentum_buffer"]
                         momentum_buffer.mul_(momentum).add_(grad, alpha=1 - dampening)
@@ -109,20 +109,20 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                             grad = momentum_buffer
                         # we have all the things projected
                         if self.expmap_update:
-                            new_point = manifold.expmap(-learning_rate * grad, point, self.c)
+                            new_point = manifold.expmap(-learning_rate * grad, point)
                         else:
-                            new_point = manifold.retraction(-learning_rate * grad, point, self.c)
-                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, self.c)
+                            new_point = manifold.retraction(-learning_rate * grad, point)
+                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point)
                         momentum_buffer.copy_(new_momentum_buffer)
                         # use copy only for user facing point
                         point.copy_(new_point)
                     else:
                         if self.expmap_update:
                             # Exact update on the manifold using the exponential map
-                            new_point = manifold.expmap(-learning_rate * grad, point, self.c)
+                            new_point = manifold.expmap(-learning_rate * grad, point)
                         else:
                             # First-order approximation of the update using the retraction mapping
-                            new_point = manifold.retraction(-learning_rate * grad, point, self.c)
+                            new_point = manifold.retraction(-learning_rate * grad, point)
                         point.copy_(new_point)
 
                 if group["stabilize"] is not None and group["step"] % group["stabilize"] == 0:
@@ -136,7 +136,7 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                 continue
             manifold = p.manifold
             momentum = group["momentum"]
-            p.copy_(manifold.proj(p, self.c))
+            p.copy_(manifold.proj(p))
             if momentum > 0:
                 param_state = self.state[p]
                 if not param_state:  # due to None grads

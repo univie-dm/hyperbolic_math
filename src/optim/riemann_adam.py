@@ -1,9 +1,9 @@
-from typing import Tuple
-
 import torch.optim
 
-from ..manifolds import ManifoldParameter
+from typing import Tuple
 from .mixin import OptimMixin
+from ..manifolds import ManifoldParameter
+
 
 
 __all__ = ["RiemannianAdam"]
@@ -53,7 +53,6 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
         self,
         params,
         lr: float,
-        c: torch.Tensor,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0,
@@ -79,7 +78,7 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
             weight_decay=weight_decay,
             amsgrad=amsgrad,
         )
-        super().__init__(params, c=c, expmap_update=expmap_update, stabilize=stabilize, **defaults)
+        super().__init__(params, expmap_update=expmap_update, stabilize=stabilize, **defaults)
 
     def step(self, closure=None):
         loss = None
@@ -128,12 +127,12 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     exp_avg_sq = state["exp_avg_sq"]
                     # actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, self.c)
+                    grad = manifold.egrad2rgrad(grad, point)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
 
                     if param_is_hyperbolic:
                         # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
-                        exp_avg_sq_new = manifold.tangent_inner(u=grad, v=grad, x=point, c=self.c)
+                        exp_avg_sq_new = manifold.tangent_inner(u=grad, v=grad, x=point)
                     else:
                         # Euclidean parameter: Compute grad^2 parameter-wise
                         exp_avg_sq_new = grad.pow(2)
@@ -156,10 +155,10 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     # 1. Project onto Tangent space
                     # 2. Update with exponential map
                     if self.expmap_update:
-                        new_point = manifold.expmap(-learning_rate * direction, point, self.c)
+                        new_point = manifold.expmap(-learning_rate * direction, point)
                     else:
-                        new_point = manifold.retraction(-learning_rate * direction, point, self.c)
-                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, self.c)
+                        new_point = manifold.retraction(-learning_rate * direction, point)
+                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point)
                     # use copy only for user facing point
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)
@@ -180,6 +179,6 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                 continue
             manifold = p.manifold
             exp_avg = state["exp_avg"]
-            p.copy_(manifold.proj(p, self.c))
+            p.copy_(manifold.proj(p))
             # FIXME: Must implement proju
             exp_avg.copy_(manifold.proju(p, exp_avg))
