@@ -821,6 +821,8 @@ class PoincareBall(Manifold):
     # mobius_pointwise_mul
     # geodesic_unit
 
+#TODO was faulty self ref etc.
+
 '''
 @torch.jit.script
 def dist_compiled(self, x: torch.Tensor, y: torch.Tensor,
