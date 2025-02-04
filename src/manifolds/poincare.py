@@ -144,7 +144,8 @@ class PoincareBall(Manifold):
         Stability
         ---------
         The PoincareBall multiplication converges towards the tangent space multiplication
-            as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
+        as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
+        
         Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         x_norm = x.norm(p=2, dim=-1, keepdim=True)
@@ -397,11 +398,15 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
+        
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
-            since tanh(z) ~ z for small z.
+        since tanh(z) ~ z for small z.
+        
         TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
-            lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
+        lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
+        
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
+        
         Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
@@ -454,8 +459,10 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
+        
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
-            since tanh(z) ~ z for small z.
+        since tanh(z) ~ z for small z.
+        
         Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
@@ -529,8 +536,10 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
+        
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
-            since artanh(z) ~ z for small z.
+        since artanh(z) ~ z for small z.
+        
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         sub = self.addition(-x, y)
@@ -575,8 +584,9 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
+        
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
-            since artanh(z) ~ z for small z.
+        since artanh(z) ~ z for small z.
         """
         y_norm = y.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = self.c.sqrt() * y_norm
