@@ -9,16 +9,10 @@ from src.optim import RiemannianAdam, RiemannianSGD
 from .fixtures import manifold, seed
 
 
-@pytest.fixture(scope="module", params=[torch.float32, torch.float64], ids=["float32", "float64"])
-def dtype(request: pytest.FixtureRequest) -> torch.dtype:
-    """Test different data types."""
-    return request.param
 
 
-@pytest.fixture(scope="module")
-def c(dtype: torch.dtype) -> torch.Tensor:
-    """Generate a random curvature magnitude(s)."""
-    return torch.ones(1, dtype=dtype)
+
+
 
 
 @pytest.fixture(scope="module")
@@ -45,7 +39,7 @@ def test_riemannian_adam(
 ):
     """Optimizer test: Fit a random starting point towards (0.5, 0.5)."""
     atol, rtol = tolerance
-    ideal = torch.tensor([0.5, 0.5], dtype=dtype)
+    ideal = torch.tensor([[0.5, 0.5]], dtype=dtype)
     start = torch.randn(2, dtype=dtype) / 2
     start = manifold.expmap_0(start, c=c)
     start = ManifoldParameter(start, manifold=manifold, requires_grad=True, c=c)
