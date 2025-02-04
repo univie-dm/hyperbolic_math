@@ -2,78 +2,52 @@
 
 import random
 import pytest
+from tests.conftest import get_test_configs
 import torch
 
 from typing import Tuple, Union
-from .fixtures import dtype, manifold, seed
 from src.manifolds import Euclidean, Hyperboloid, PoincareBall
 
 
-@pytest.fixture(scope="module")
-def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
-    """Set the absolute and relative tolerance(s) for the tests."""
-    if dtype == torch.float32:
-        # TODO: Test limits for float32
-        atol = torch.finfo(dtype).eps
-        rtol = torch.finfo(dtype).eps
-    elif dtype == torch.float64:
-        atol = torch.finfo(dtype).eps
-        rtol = rtol = 1e-10
-    return atol, rtol
-
-@pytest.fixture(scope="module")
-def uniform_manifold_points(
-    dtype: torch.dtype,
-    manifold: Union[Euclidean, Hyperboloid, PoincareBall]
-) -> torch.Tensor:
-    """Generate points distributed uniformly at random on the manifold(s)."""
-    dim = random.randint(1, 10)
+def get_uniform_points(manifold: Union[Euclidean, PoincareBall, Hyperboloid], dtype: torch.dtype, dim: int = None):
+    """Helper to generate uniform points for each manifold type"""
+    dim = dim or random.randint(1, 10)
     num_pts = 2_500 * 6
+    
     if isinstance(manifold, Euclidean):
-        limit = 1_000
-        points = torch.empty((num_pts, dim), dtype=dtype).uniform_(-limit, limit)
+        return torch.empty((num_pts, dim), dtype=dtype).uniform_(-1000, 1000)
     elif isinstance(manifold, PoincareBall):
-        random_dirs = torch.normal(mean=torch.zeros((num_pts, dim), dtype=dtype), std=torch.ones((num_pts, dim), dtype=dtype))
+        random_dirs = torch.normal(0, 1, size=(num_pts, dim), dtype=dtype)
         random_dirs /= random_dirs.norm(p=2, dim=-1, keepdim=True)
-        # Generate random radii with probability proportional to the surface area
         random_radii = torch.rand((num_pts, 1), dtype=dtype).pow(1 / dim)
-        points = manifold.c**-0.5 * (random_dirs * random_radii)
-    elif isinstance(manifold, Hyperboloid):
-        # TODO
-        pass
-    return points
+        return manifold.c**-0.5 * (random_dirs * random_radii)
 
+def is_in_manifold(manifold: Union[Euclidean, PoincareBall, Hyperboloid], x: torch.Tensor) -> bool:
+   """Helper function to check if points are in manifold."""
+   return manifold.is_in_manifold(x)
 
-def test_is_in_manifold(
-    manifold: Union[Euclidean, PoincareBall], uniform_manifold_points: torch.Tensor
-) -> None:
-    """Check that all points are on the manifold(s)."""
-    assert manifold.is_in_manifold(uniform_manifold_points)
-
-@pytest.mark.skip(reason="not implemented yet")
-def test_addition(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
-    """Test the addition operation."""
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_addition(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
+    """Test addition operation"""
+    manifold = manifold_class(c)
+    points = get_uniform_points(manifold, dtype)
     atol, rtol = tolerance
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     identity = torch.zeros_like(uniform_manifold_points)
     x, y = uniform_manifold_points.split(uniform_manifold_points.shape[0] // 2, dim=0)
     # Additive identity
     torch.testing.assert_close(
-        manifold.addition(identity, uniform_manifold_points, c), uniform_manifold_points, atol=atol, rtol=rtol
+        manifold.addition(identity, uniform_manifold_points), uniform_manifold_points, atol=atol, rtol=rtol
     )
     torch.testing.assert_close(
-        manifold.addition(uniform_manifold_points, identity, c), uniform_manifold_points, atol=atol, rtol=rtol
+        manifold.addition(uniform_manifold_points, identity), uniform_manifold_points, atol=atol, rtol=rtol
     )
     # Additive inverse
     torch.testing.assert_close(
-        manifold.addition(-uniform_manifold_points, uniform_manifold_points, c), identity, atol=atol, rtol=rtol
+        manifold.addition(-uniform_manifold_points, uniform_manifold_points), identity, atol=atol, rtol=rtol
     )
     torch.testing.assert_close(
-        manifold.addition(uniform_manifold_points, -uniform_manifold_points, c), identity, atol=atol, rtol=rtol
+        manifold.addition(uniform_manifold_points, -uniform_manifold_points), identity, atol=atol, rtol=rtol
     )
     # # Left cancellation law
     # #TODO: Fails with abs. diff. 2.72e-08 and rel. diff. 5.10e-06
@@ -84,83 +58,79 @@ def test_addition(
     #     rtol=rtol
     # )
     # Distributive law
-    torch.testing.assert_close(-manifold.addition(x, y, c), manifold.addition(-x, -y, c), atol=atol, rtol=rtol)
+    torch.testing.assert_close(-manifold.addition(x, y), manifold.addition(-x, -y), atol=atol, rtol=rtol)
     # Gyrotriangle inequality
     assert torch.all(
-        manifold.addition(x, y, c).norm(p=2, dim=-1, keepdim=True)
-        <= manifold.addition(x.norm(p=2, dim=-1, keepdim=True), y.norm(p=2, dim=-1, keepdim=True), c)
+        manifold.addition(x, y).norm(p=2, dim=-1, keepdim=True)
+        <= manifold.addition(x.norm(p=2, dim=-1, keepdim=True), y.norm(p=2, dim=-1, keepdim=True))
     )
     # Numerical additive closedness
-    assert manifold.is_in_manifold(manifold.addition(x, y, c), c)
+    assert manifold.is_in_manifold(manifold.addition(x, y))
 
-@pytest.mark.skip(reason="not implemented yet")
-def test_scalar_mul(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_scalar_mul(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the scalar_mul operation."""
+    manifold = manifold_class(c)
     atol, rtol = tolerance
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     identity = torch.ones((uniform_manifold_points.shape[0], 1), dtype=uniform_manifold_points.dtype)
     r1 = torch.rand((uniform_manifold_points.shape[0], 1), dtype=uniform_manifold_points.dtype)
     r2 = torch.rand((uniform_manifold_points.shape[0], 1), dtype=uniform_manifold_points.dtype)
     # Multiplicative identity
     torch.testing.assert_close(
-        manifold.scalar_mul(identity, uniform_manifold_points, c), uniform_manifold_points, atol=atol, rtol=rtol
+        manifold.scalar_mul(identity, uniform_manifold_points), uniform_manifold_points, atol=atol, rtol=rtol
     )
     # N-Gyroaddition
     n = random.randint(3, 10)
     n_sum = torch.zeros_like(uniform_manifold_points)
     for _ in range(n):
-        n_sum = manifold.addition(n_sum, uniform_manifold_points, c)
-    torch.testing.assert_close(n_sum, manifold.scalar_mul(n * identity, uniform_manifold_points, c), atol=atol, rtol=rtol)
+        n_sum = manifold.addition(n_sum, uniform_manifold_points)
+    torch.testing.assert_close(n_sum, manifold.scalar_mul(n * identity, uniform_manifold_points), atol=atol, rtol=rtol)
     # Distributive laws
     torch.testing.assert_close(
-        manifold.scalar_mul(r1 + r2, uniform_manifold_points, c),
+        manifold.scalar_mul(r1 + r2, uniform_manifold_points),
         manifold.addition(
-            manifold.scalar_mul(r1, uniform_manifold_points, c),
-            manifold.scalar_mul(r2, uniform_manifold_points, c),
-            c,
+            manifold.scalar_mul(r1, uniform_manifold_points),
+            manifold.scalar_mul(r2, uniform_manifold_points),
         ),
         atol=atol,
         rtol=rtol,
     )
     torch.testing.assert_close(
-        manifold.scalar_mul(-r1, uniform_manifold_points, c),
-        manifold.scalar_mul(r1, -uniform_manifold_points, c),
+        manifold.scalar_mul(-r1, uniform_manifold_points),
+        manifold.scalar_mul(r1, -uniform_manifold_points),
         atol=atol,
         rtol=rtol,
     )
     # Associative laws
     torch.testing.assert_close(
-        manifold.scalar_mul(r1 * r2, uniform_manifold_points, c),
-        manifold.scalar_mul(r1, manifold.scalar_mul(r2, uniform_manifold_points, c), c),
+        manifold.scalar_mul(r1 * r2, uniform_manifold_points),
+        manifold.scalar_mul(r1, manifold.scalar_mul(r2, uniform_manifold_points)),
         atol=atol,
         rtol=rtol,
     )
     torch.testing.assert_close(
-        manifold.scalar_mul(r1 * r2, uniform_manifold_points, c),
-        manifold.scalar_mul(r2, manifold.scalar_mul(r1, uniform_manifold_points, c), c),
+        manifold.scalar_mul(r1 * r2, uniform_manifold_points),
+        manifold.scalar_mul(r2, manifold.scalar_mul(r1, uniform_manifold_points)),
         atol=atol,
         rtol=rtol,
     )
     # Scaling property
-    left_side = manifold.scalar_mul(torch.abs(r1), uniform_manifold_points, c)
-    left_side /= manifold.scalar_mul(r1, uniform_manifold_points, c).norm(p=2, dim=-1, keepdim=True)
+    left_side = manifold.scalar_mul(torch.abs(r1), uniform_manifold_points)
+    left_side /= manifold.scalar_mul(r1, uniform_manifold_points).norm(p=2, dim=-1, keepdim=True)
     torch.testing.assert_close(
         left_side, uniform_manifold_points / uniform_manifold_points.norm(p=2, dim=-1, keepdim=True), atol=atol, rtol=rtol
     )
     # Homogenity property
     torch.testing.assert_close(
-        manifold.scalar_mul(r1, uniform_manifold_points, c).norm(p=2, dim=-1, keepdim=True),
-        manifold.scalar_mul(torch.abs(r1), uniform_manifold_points.norm(p=2, dim=-1, keepdim=True), c),
+        manifold.scalar_mul(r1, uniform_manifold_points).norm(p=2, dim=-1, keepdim=True),
+        manifold.scalar_mul(torch.abs(r1), uniform_manifold_points.norm(p=2, dim=-1, keepdim=True)),
         atol=atol,
         rtol=rtol,
     )
     # Numerical multiplicative closedness
-    assert manifold.is_in_manifold(manifold.scalar_mul(r1, uniform_manifold_points, c), c)
-    assert manifold.is_in_manifold(manifold.scalar_mul(r2, uniform_manifold_points, c), c)
+    assert manifold.is_in_manifold(manifold.scalar_mul(r1, uniform_manifold_points))
+    assert manifold.is_in_manifold(manifold.scalar_mul(r2, uniform_manifold_points))
     # Numerical stability
     r_zero = torch.tensor(0, dtype=uniform_manifold_points.dtype)
     r_small = torch.tensor(atol, dtype=uniform_manifold_points.dtype)
@@ -168,40 +138,36 @@ def test_scalar_mul(
     v_eps_norm = torch.zeros((1, uniform_manifold_points.shape[1]), dtype=uniform_manifold_points.dtype)
     v_eps_norm[0, 0] = atol
     # Stability of multiplication with zero scalars
-    res = manifold.scalar_mul(r_zero, uniform_manifold_points, c)
+    res = manifold.scalar_mul(r_zero, uniform_manifold_points)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     torch.testing.assert_close(res, torch.zeros_like(uniform_manifold_points), atol=atol, rtol=rtol)
-    res = manifold.scalar_mul(r_zero, v_eps_norm, c)
+    res = manifold.scalar_mul(r_zero, v_eps_norm)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     torch.testing.assert_close(res, torch.zeros_like(v_eps_norm), atol=atol, rtol=rtol)
     # Stability of multiplication with small scalars
-    res = manifold.scalar_mul(r_small, v_eps_norm, c)
+    res = manifold.scalar_mul(r_small, v_eps_norm)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
     # Stability of multiplication with large scalars
-    res = manifold.scalar_mul(r_huge, uniform_manifold_points, c)
+    res = manifold.scalar_mul(r_huge, uniform_manifold_points)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
-    res = manifold.scalar_mul(r_huge, v_eps_norm, c)
+    assert manifold.is_in_manifold(res)
+    res = manifold.scalar_mul(r_huge, v_eps_norm)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
-
-@pytest.mark.skip(reason="not implemented yet")
-def test_matvec_mul(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_matvec_mul(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the matvec_mul operation."""
+    manifold = manifold_class(c)
     atol, rtol = tolerance
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     pass
     # def test_matvec_zeros(a, manifold):
     #     mat = a.new_zeros((3, a.shape[-1]))
@@ -256,64 +222,60 @@ def test_matvec_mul(
     #     assert torch.isfinite(manifold.k.grad).all()
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_dist(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_dist(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the dist and dist_0 operations."""
+    manifold = manifold_class(c)
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     atol, rtol = tolerance
     x, y, z = uniform_manifold_points.split(uniform_manifold_points.shape[0] // 3, dim=0)
-    assert torch.isfinite(manifold.dist_0(x, c)).all()
-    assert torch.isfinite(manifold.dist(x, y, c)).all()
+    assert torch.isfinite(manifold.dist_0(x)).all()
+    assert torch.isfinite(manifold.dist(x, y)).all()
     # Reflexivity
     torch.testing.assert_close(
-        manifold.dist(uniform_manifold_points, uniform_manifold_points, c),
+        manifold.dist(uniform_manifold_points, uniform_manifold_points),
         torch.zeros((uniform_manifold_points.shape[0], 1), dtype=uniform_manifold_points.dtype),
         atol=atol,
         rtol=rtol,
     )
     # Symmetry
-    torch.testing.assert_close(manifold.dist(x, y, c), manifold.dist(y, x, c), atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold.dist(x, y), manifold.dist(y, x), atol=atol, rtol=rtol)
     # Triangle inequality
-    assert torch.all(manifold.dist(x, z, c) <= manifold.dist(x, y, c) + manifold.dist(y, z, c))
+    assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z))
     # Consistency of dist with dist_0
     torch.testing.assert_close(
-        manifold.dist(uniform_manifold_points, torch.zeros_like(uniform_manifold_points), c),
-        manifold.dist_0(uniform_manifold_points, c),
+        manifold.dist(uniform_manifold_points, torch.zeros_like(uniform_manifold_points)),
+        manifold.dist_0(uniform_manifold_points),
         atol=atol,
         rtol=rtol,
     )
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_expmap_and_logmap(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_expmap_and_logmap(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the expmap, expmap_0, logmap and logmap_0 operations."""
+    manifold = manifold_class(c)
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     atol, rtol = tolerance
     x, y = uniform_manifold_points.split(uniform_manifold_points.shape[0] // 2, dim=0)
     v = torch.empty_like(uniform_manifold_points).uniform_(-1_000, 1_000)
     # Numerical stability of expmap/expmap_0
-    v_manif = manifold.expmap(v, uniform_manifold_points, c)
+    v_manif = manifold.expmap(v, uniform_manifold_points)
     assert torch.isfinite(v_manif).all()
-    assert manifold.is_in_manifold(v_manif, c)
-    v_manif = manifold.expmap_0(v, c)
+    assert manifold.is_in_manifold(v_manif)
+    v_manif = manifold.expmap_0(v)
     assert torch.isfinite(v_manif).all()
-    assert manifold.is_in_manifold(v_manif, c)
+    assert manifold.is_in_manifold(v_manif)
     # Numerical stability of logmap/logmap_0
     if isinstance(manifold, Hyperboloid):
-        manifold.is_in_tangent_space(manifold.logmap(uniform_manifold_points, c), c)
-        manifold.is_in_tangent_space(manifold.logmap_0(uniform_manifold_points, c), c)
+        manifold.is_in_tangent_space(manifold.logmap(uniform_manifold_points))
+        manifold.is_in_tangent_space(manifold.logmap_0(uniform_manifold_points))
     # Stability of inverse operations
     # Note: logmap(expmap(y, x), x) != y and logmap_0(expmap_0(v)) != v
     # This is because exmap/expmap_0 uses backproj. which is not injective
-    res = manifold.expmap(manifold.logmap(y, x, c), x, c)
+    res = manifold.expmap(manifold.logmap(y, x), x)
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     # TODO: The following assertion should hold, but does not. WHY?
     # torch.testing.assert_close(
     #     res,
@@ -321,22 +283,22 @@ def test_expmap_and_logmap(
     #     atol=atol,
     #     rtol=rtol
     # )
-    res = manifold.expmap_0(manifold.logmap_0(uniform_manifold_points, c), c)
+    res = manifold.expmap_0(manifold.logmap_0(uniform_manifold_points))
     assert torch.isfinite(res).all()
-    assert manifold.is_in_manifold(res, c)
+    assert manifold.is_in_manifold(res)
     torch.testing.assert_close(res, uniform_manifold_points, atol=atol, rtol=rtol)
     # Consistency of expmap/logmap with expmap_0/logmap_0
-    torch.testing.assert_close(manifold.expmap(v, torch.zeros_like(v), c), manifold.expmap_0(v, c), atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold.expmap(v, torch.zeros_like(v)), manifold.expmap_0(v), atol=atol, rtol=rtol)
     torch.testing.assert_close(
-        manifold.logmap(uniform_manifold_points, torch.zeros_like(uniform_manifold_points), c),
-        manifold.logmap_0(uniform_manifold_points, c),
+        manifold.logmap(uniform_manifold_points, torch.zeros_like(uniform_manifold_points)),
+        manifold.logmap_0(uniform_manifold_points),
         atol=atol,
         rtol=rtol,
     )
     # Consistency of dist_0 and logmap_0
     torch.testing.assert_close(
-        manifold.dist_0(uniform_manifold_points, c),
-        manifold.tangent_norm(manifold.logmap_0(uniform_manifold_points, c), torch.zeros_like(uniform_manifold_points), c),
+        manifold.dist_0(uniform_manifold_points),
+        manifold.tangent_norm(manifold.logmap_0(uniform_manifold_points), torch.zeros_like(uniform_manifold_points)),
         atol=atol,
         rtol=rtol,
     )
@@ -344,12 +306,11 @@ def test_expmap_and_logmap(
 
 # TODO:
 @pytest.mark.skip(reason="not implemented yet")
-def test_tangent_inner_and_norm(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_tangent_inner_and_norm(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
+    manifold = manifold_class(c)
+    atol, rtol = tolerance
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
     """Test the tangent_inner and tangent_norm operations."""
     pass
     #         tangent = unary_case.v
@@ -364,13 +325,12 @@ def test_tangent_inner_and_norm(
 
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_ptransp(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_ptransp(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the ptransp and ptransp_0 operations."""
+    manifold = manifold_class(c)
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
+    atol, rtol = tolerance
     pass
     #         test_parallel_transport() -> None:
     #     mu1 = t([2., 1, np.sqrt(2)]).double() / radius
@@ -468,13 +428,12 @@ def test_ptransp(
 
 
 @pytest.mark.skip(reason="needs recheck")
-def test_gyration(
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    uniform_manifold_points: torch.Tensor,
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-) -> None:
+@pytest.mark.parametrize("manifold_class,c", get_test_configs(torch.float64))
+def test_gyration(manifold_class: Union[Euclidean, PoincareBall, Hyperboloid], c: torch.Tensor, dtype: torch.dtype, tolerance: Tuple[float, float]) -> None:
     """Test the gyration operation of the PoincareBall."""
+    manifold = manifold_class(c)
+    uniform_manifold_points = get_uniform_points(manifold, dtype)
+    atol, rtol = tolerance
     pass
     # x, y, z, a = uniform_manifold_points.split(uniform_manifold_points.shape[0] // 4, dim=0)
     # atol, rtol = tolerance

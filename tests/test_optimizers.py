@@ -6,7 +6,7 @@ import torch
 from src.manifolds import Euclidean, Hyperboloid, ManifoldParameter, PoincareBall
 from src.optim import RiemannianAdam, RiemannianSGD
 
-from .fixtures import manifold, seed
+from .conftest import manifold, seed
 
 
 
