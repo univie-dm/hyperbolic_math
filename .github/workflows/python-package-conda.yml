@@ -1,14 +1,13 @@
 name: Python Package CI
 on:
-  push:
-    branches: [ main ]
+  push
 
 jobs:
   build-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10']
+        python-version: ['3.8', '3.9', '3.10', '3.11']
       fail-fast: false  # This allows other versions to complete if one fails
 
     steps:
