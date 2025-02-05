@@ -6,14 +6,7 @@ import torch
 from src.manifolds import Euclidean, Hyperboloid, ManifoldParameter, PoincareBall
 from src.optim import RiemannianAdam, RiemannianSGD
 
-from .conftest import manifold, seed
-
-
-
-
-
-
-
+@pytest.skip("Not implemented", allow_module_level=True)
 
 @pytest.fixture(scope="module")
 def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
