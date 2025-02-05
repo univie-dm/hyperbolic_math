@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch.optim
 
-from ..manifolds import ManifoldParameter
+from ..manifolds import ManifoldParameter, Euclidean
 from .mixin import OptimMixin
 
 
@@ -99,7 +99,7 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                         continue
 
                     # Flag for hyperbolic parameters
-                    param_is_hyperbolic = isinstance(point, ManifoldParameter)
+                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
                     if param_is_hyperbolic:
                         manifold = point.manifold
                     else:
