@@ -13,8 +13,8 @@ class PoincareBall(Manifold):
     Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
     """
 
-    def __init__(self, c: torch.Tensor = 1.0):
-        super().__init__(c)
+    def __init__(self, c: torch.Tensor = 1.0, trainable_c: bool=False):
+        super().__init__(c, trainable_c)
         self.name = "PoincareBall"
         self.min_enorm = 1e-15
         self.max_enorm_eps = 5e-15

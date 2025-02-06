@@ -8,8 +8,11 @@ from typing import Union
 class Manifold:
     """Abstract manifold class."""
 
-    def __init__(self, c: torch.Tensor=1.0):
-        self.c = c
+    def __init__(self, c: torch.Tensor=1.0, trainable_c: bool=False):
+        if trainable_c:
+            self.c = torch.nn.Parameter(c)
+        else:
+            self.c = c
         self.min_enorm = None
         self.max_enorm_eps = None
 
@@ -93,11 +96,10 @@ class Manifold:
 class ManifoldParameter(torch.nn.Parameter):
     """Subclass of torch.nn.Parameter for Riemannian optimization."""
 
-    def __new__(cls, data, requires_grad, manifold, c):
+    def __new__(cls, data, requires_grad, manifold):
         return torch.nn.Parameter.__new__(cls, data, requires_grad)
 
-    def __init__(self, data, requires_grad, manifold, c):
-        self.c = c
+    def __init__(self, data, requires_grad, manifold):
         self.manifold = manifold
 
     def __repr__(self):
