@@ -72,7 +72,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        Denominator is zero iff c=-1/(||x||*||y||), but c > 0.
+        Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
         c2 = self.c**2
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
@@ -110,7 +110,7 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        Denominator is zero iff c=-1/(||x||*||y||), but c > 0.
+        Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
         y2 = y.pow(2).sum(dim=-1, keepdim=True)
@@ -308,6 +308,7 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
+        #return dist_compiled(x, y, self.c, version)
         if version == "mobius":
             # Mobius-dist
             sqrt_c = self.c.sqrt()
@@ -358,6 +359,7 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
+        #return dist_0_compiled(x, self.c, version)
         if version in ["mobius", "mobius_symmetric"]:
             # Mobius-dist/Symmetrized mobius-dist
             sqrt_c = self.c.sqrt()
@@ -831,57 +833,58 @@ class PoincareBall(Manifold):
     # mobius_pointwise_mul
     # geodesic_unit
 
-#TODO was faulty self ref etc.
 
-'''
-@torch.jit.script
-def dist_compiled(self, x: torch.Tensor, y: torch.Tensor,
-                  c: torch.Tensor, version: str) -> torch.Tensor:
-    """
-    Script compiled version of the dist method.
-    """
-    if version == "mobius":
-        # Mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
-    elif version == "mobius_symmetric":
-        # TODO check if this is algebraically allowed, numerically OK
-        # Symmetrized mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c_1 = artanh(sqrt_c * self.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
-        dist_c_2 = artanh(sqrt_c * self.addition(-y, x).norm(p=2, dim=-1, keepdim=True))
-        res = (dist_c_1 + dist_c_2) / sqrt_c
-    elif version == "metric_tensor":
-        # Metric-tensor-induced-dist
-        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-        y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
-        xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
-        res = 1 + 2 * c * xy_diff_sqnorm / ((1 - c * x_sqnorm) * (1 - c * y_sqnorm))
-        condition = res < 1 + self.min_enorm
-        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
-    else:
-        raise ValueError(f"Unknown version: {version}")
-    return res
 
-@torch.jit.script
-def dist_0_compiled(self, x: torch.Tensor, c: torch.Tensor, version: str) -> torch.Tensor:
-    """
-    Script compiled version of the dist_0 method.
-    """
-    if version in ["mobius", "mobius_symmetric"]:
-        # Mobius-dist/Symmetrized mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
-    elif version == "metric_tensor":
-        # Metric-tensor-induced-dist
-        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-        res = 1 + 2 * c * x_sqnorm / (1 - c * x_sqnorm)
-        condition = res < 1 + self.min_enorm
-        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
-    else:
-        raise ValueError(f"Unknown version: {version}")
-    return res
-'''
 
+#TODO faulty self ref etc.
+
+# @torch.jit.script
+# def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str) -> torch.Tensor:
+#     """
+#     Script compiled version of the dist method.
+#     """
+#     manifold = PoincareBall(c)
+#     if version == "mobius":
+#         # Mobius-dist
+#         sqrt_c = manifold.c.sqrt()
+#         dist_c = artanh(sqrt_c * manifold.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
+#         res = 2 * dist_c / sqrt_c
+#     elif version == "mobius_symmetric":
+#         # TODO check if this is algebraically allowed, numerically OK
+#         # Symmetrized mobius-dist
+#         sqrt_c = manifold.c.sqrt()
+#         dist_c_1 = artanh(sqrt_c * manifold.addition(-x, y).norm(p=2, dim=-1, keepdim=True))
+#         dist_c_2 = artanh(sqrt_c * manifold.addition(-y, x).norm(p=2, dim=-1, keepdim=True))
+#         res = (dist_c_1 + dist_c_2) / sqrt_c
+#     elif version == "metric_tensor":
+#         # Metric-tensor-induced-dist
+#         x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+#         y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
+#         xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
+#         res = 1 + 2 * manifold.c * xy_diff_sqnorm / ((1 - manifold.c * x_sqnorm) * (1 - manifold.c * y_sqnorm))
+#         condition = res < 1 + manifold.min_enorm
+#         res = torch.where(condition, torch.zeros_like(res), arcosh(res) / manifold.c.sqrt())
+#     else:
+#         raise ValueError(f"Unknown version: {version}")
+#     return res
+
+# @torch.jit.script
+# def dist_0_compiled(self, x: torch.Tensor, c: torch.Tensor, version: str) -> torch.Tensor:
+#     """
+#     Script compiled version of the dist_0 method.
+#     """
+#     manifold = PoincareBall(c)
+#     if version in ["mobius", "mobius_symmetric"]:
+#         # Mobius-dist/Symmetrized mobius-dist
+#         sqrt_c = manifold.c.sqrt()
+#         dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
+#         res = 2 * dist_c / sqrt_c
+#     elif version == "metric_tensor":
+#         # Metric-tensor-induced-dist
+#         x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
+#         res = 1 + 2 * manifold.c * x_sqnorm / (1 - manifold.c * x_sqnorm)
+#         condition = res < 1 + self.min_enorm
+#         res = torch.where(condition, torch.zeros_like(res), arcosh(res) / manifold.c.sqrt())
+#     else:
+#         raise ValueError(f"Unknown version: {version}")
+#     return res

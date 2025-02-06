@@ -1,52 +1,51 @@
 import torch.optim
 
 from typing import Tuple
-from .mixin import OptimMixin
-from ..manifolds import ManifoldParameter
-
+from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
 
 
 __all__ = ["RiemannianAdam"]
 
 
-class RiemannianAdam(OptimMixin, torch.optim.Adam):
-    r"""
+class RiemannianAdam(torch.optim.Adam):
+    """
     Riemannian Adam with the same API as :class:`torch.optim.Adam`.
 
     Parameters
     ----------
     params : iterable
-        iterable of parameters to optimize or dicts defining
-        parameter groups
+        Iterable of parameters to optimize or dicts defining parameter groups
     lr : float (optional)
-        learning rate (default: 1e-3)
+        Learning rate (default: 1e-3)
     betas : Tuple[float, float] (optional)
-        coefficients used for computing
-        running averages of gradient and its square (default: (0.9, 0.999))
+        Coefficients used for computing running averages of gradient
+        and its square (default: (0.9, 0.999))
     eps : float (optional)
-        term added to the denominator to improve
+        Term added to the denominator to improve
         numerical stability (default: 1e-8)
     weight_decay : float (optional)
-        weight decay (L2 penalty) (default: 0)
+        Weight decay (L2 penalty) (default: 0)
     amsgrad : bool (optional)
-        whether to use the AMSGrad variant of this
-        algorithm from the paper `On the Convergence of Adam and Beyond`_
+        Whether to use the AMSGrad variant of this algorithm
+        from the paper `On the Convergence of Adam and Beyond`_
         (default: False)
 
     Other Parameters
     ----------------
     c : torch.Tensor
-        Curvature parameter for mathematical operations on the manifold
+        Curvature parameter of the manifold
+        (Currently removed)
     expmap_update : bool = False
         Update the parameters with exponential map instead of retraction
-    stabilize : int | None
-        Stabilize parameters if they are off-manifold due to numerical
-        reasons every ``stabilize`` steps (default: ``None`` -- no stabilize)
 
 
     .. _On the Convergence of Adam and Beyond:
         https://openreview.net/forum?id=ryQu7f-RZ
-
+    
+    References
+    ----------
+    Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+        arXiv (2020).
     """
 
     def __init__(
@@ -58,7 +57,6 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
         weight_decay: float = 0,
         amsgrad: bool = False,
         expmap_update: bool = False,
-        stabilize: bool = None,
     ):
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -78,7 +76,8 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
             weight_decay=weight_decay,
             amsgrad=amsgrad,
         )
-        super().__init__(params, expmap_update=expmap_update, stabilize=stabilize, **defaults)
+        super().__init__(params, **defaults)
+        self.expmap_update = expmap_update
 
     def step(self, closure=None):
         loss = None
@@ -91,26 +90,19 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                 eps = group["eps"]
                 learning_rate = group["lr"]
                 amsgrad = group["amsgrad"]
-                stabilize = False
                 for point in group["params"]:
                     grad = point.grad
                     if grad is None:
                         continue
 
                     # Flag for hyperbolic parameters
-                    param_is_hyperbolic = isinstance(point, ManifoldParameter)
+                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
                     if param_is_hyperbolic:
                         manifold = point.manifold
                     else:
-                        manifold = self._default_manifold
-
-                    if grad.is_sparse:
-                        raise RuntimeError(
-                            "RiemannianAdam does not support sparse gradients, use SparseRiemannianAdam instead"
-                        )
+                        manifold = Euclidean()
 
                     state = self.state[point]
-
                     # State initialization
                     if len(state) == 0:
                         state["step"] = 0
@@ -122,10 +114,10 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                             # Maintains max of all exp. moving avg. of sq. grad. values
                             state["max_exp_avg_sq"] = torch.zeros_like(point)
                     state["step"] += 1
-                    # make local variables for easy access
+                    # Make local variables for easy access
                     exp_avg = state["exp_avg"]
                     exp_avg_sq = state["exp_avg_sq"]
-                    # actual step
+                    # Actual step
                     grad.add_(point, alpha=weight_decay)
                     grad = manifold.egrad2rgrad(grad, point)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
@@ -148,37 +140,22 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                         denom = max_exp_avg_sq.div(bias_correction2).sqrt_()
                     else:
                         denom = exp_avg_sq.div(bias_correction2).sqrt_()
-                    # copy the state, we need it for retraction
-                    # get the direction for ascend
+                    # Get the direction for ascend
                     direction = exp_avg.div(bias_correction1) / denom.add_(eps)
-                    # transport the exponential averaging to the new point
-                    # 1. Project onto Tangent space
-                    # 2. Update with exponential map
+                    
+                    if isinstance(manifold, Hyperboloid):
+                        # Project the gradient direction onto the Tangent space
+                        pass
                     if self.expmap_update:
+                        # Exact update on the manifold using the exponential map
                         new_point = manifold.expmap(-learning_rate * direction, point)
                     else:
+                        # First-order approximation of the update using the retraction mapping
                         new_point = manifold.retraction(-learning_rate * direction, point)
+                    # Parallel transport the exponential averaging to the new point
                     exp_avg_new = manifold.ptransp(exp_avg, point, new_point)
-                    # use copy only for user facing point
+                    # Use copy only for user facing point
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)
 
-                    if group["stabilize"] is not None and state["step"] % group["stabilize"] == 0:
-                        stabilize = True
-                if stabilize:
-                    self.stabilize_group(group)
         return loss
-
-    @torch.no_grad()
-    def stabilize_group(self, group):
-        for p in group["params"]:
-            if not isinstance(p, ManifoldParameter):
-                continue
-            state = self.state[p]
-            if not state:  # due to None grads
-                continue
-            manifold = p.manifold
-            exp_avg = state["exp_avg"]
-            p.copy_(manifold.proj(p))
-            # FIXME: Must implement proju
-            exp_avg.copy_(manifold.proju(p, exp_avg))

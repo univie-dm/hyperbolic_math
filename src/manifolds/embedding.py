@@ -1,7 +1,6 @@
 import torch
 
 from typing import Literal, get_args
-
 from .manifold import Manifold, ManifoldParameter
 from .poincare import PoincareBall
 
@@ -20,7 +19,6 @@ class Embedding(torch.nn.Module):
     Embedding layer that supports different manifolds.
     """
     manifold: Manifold
-    c: torch.Tensor
     weight: ManifoldParameter
     bias: ManifoldParameter
     forward_method: ForwardPassType

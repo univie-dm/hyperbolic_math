@@ -71,6 +71,28 @@ class Euclidean(Manifold):
         res = x @ m
         return res
 
+    def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        """
+        Perform the hyperplane forward pass.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Euclidean manifold point(s)
+        m : torch.Tensor
+            (Euclidean) matrix
+        b : torch.Tensor
+            Euclidean manifold bias
+
+        Returns
+        -------
+        res : torch.Tensor
+            The product(s) of m and x
+        """
+        res = x @ m
+        res = res + b
+        return res
+
     def dist(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Euclidean manifold points x and y.

@@ -1,8 +1,9 @@
 
 import math
-from scipy.spatial.distance import squareform, pdist
-import numpy as np
 import torch
+import numpy as np
+
+from scipy.spatial.distance import squareform, pdist
 
 def get_delta(embeddings, sample_size=1500):
     idx = np.random.choice(len(embeddings), min(sample_size, len(embeddings)))

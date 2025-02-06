@@ -1,41 +1,43 @@
 import torch.optim.optimizer
 
-from .mixin import OptimMixin
-from ..manifolds import ManifoldParameter
+from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
 
 
 __all__ = ["RiemannianSGD"]
 
 
-class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
-    r"""
+class RiemannianSGD(torch.optim.Optimizer):
+    """
     Riemannian Stochastic Gradient Descent with the same API as :class:`torch.optim.SGD`.
 
     Parameters
     ----------
     params : iterable
-        iterable of parameters to optimize or dicts defining
+        Iterable of parameters to optimize or dicts defining
         parameter groups
     lr : float
-        learning rate
+        Learning rate
     momentum : float (optional)
-        momentum factor (default: 0)
+        Momentum factor (default: 0)
     weight_decay : float (optional)
-        weight decay (L2 penalty) (default: 0)
+        Weight decay (L2 penalty) (default: 0)
     dampening : float (optional)
-        dampening for momentum (default: 0)
+        Dampening for momentum (default: 0)
     nesterov : bool (optional)
-        enables Nesterov momentum (default: False)
+        Enables Nesterov momentum (default: False)
 
     Other Parameters
     ----------------
     c : torch.Tensor
-        curvature parameter for manifold math
+        Curvature parameter of the manifold
+        (Currently removed)
     expmap_update : bool = False
         Update the parameters with exponential map instead of retraction
-    stabilize : int | None
-        Stabilize parameters if they are off-manifold due to numerical
-        reasons every ``stabilize`` steps (default: ``None`` -- no stabilize)
+
+    References
+    ----------
+    Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+        arXiv (2020).
     """
 
     def __init__(
@@ -47,7 +49,6 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
         expmap_update: bool = False,
-        stabilize: bool = None,
     ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -65,7 +66,8 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
         )
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super().__init__(params, defaults, expmap_update=expmap_update, stabilize=stabilize)
+        super().__init__(params, defaults)
+        self.expmap_update = expmap_update
 
     def step(self, closure=None):
         loss = None
@@ -85,19 +87,20 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                     grad = point.grad
                     if grad is None:
                         continue
-                    if grad.is_sparse:
-                        raise RuntimeError("RiemannianSGD does not support sparse gradients, use SparseRiemannianSGD instead")
-                    state = self.state[point]
 
+                    # Flag for hyperbolic parameters
+                    if isinstance(point, ManifoldParameter):
+                        manifold = point.manifold
+                    else:
+                        manifold = Euclidean()
+
+                    state = self.state[point]
                     # State initialization
                     if len(state) == 0:
                         if momentum > 0:
                             state["momentum_buffer"] = grad.clone()
-                    if isinstance(point, ManifoldParameter):
-                        manifold = point.manifold
-                    else:
-                        manifold = self._default_manifold
 
+                    # Actual step
                     grad.add_(point, alpha=weight_decay)
                     grad = manifold.egrad2rgrad(grad, point)
                     if momentum > 0:
@@ -107,41 +110,21 @@ class RiemannianSGD(OptimMixin, torch.optim.Optimizer):
                             grad = grad.add_(momentum_buffer, alpha=momentum)
                         else:
                             grad = momentum_buffer
-                        # we have all the things projected
-                        if self.expmap_update:
-                            new_point = manifold.expmap(-learning_rate * grad, point)
-                        else:
-                            new_point = manifold.retraction(-learning_rate * grad, point)
+                    
+                    if isinstance(manifold, Hyperboloid):
+                        # Project the gradient direction onto the Tangent space
+                        pass
+                    if self.expmap_update:
+                        # Exact update on the manifold using the exponential map
+                        new_point = manifold.expmap(-learning_rate * grad, point)
+                    else:
+                        # First-order approximation of the update using the retraction mapping
+                        new_point = manifold.retraction(-learning_rate * grad, point)
+
+                    if momentum > 0:
+                        # Parallel transport the momentum to the new point
                         new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point)
                         momentum_buffer.copy_(new_momentum_buffer)
-                        # use copy only for user facing point
-                        point.copy_(new_point)
-                    else:
-                        if self.expmap_update:
-                            # Exact update on the manifold using the exponential map
-                            new_point = manifold.expmap(-learning_rate * grad, point)
-                        else:
-                            # First-order approximation of the update using the retraction mapping
-                            new_point = manifold.retraction(-learning_rate * grad, point)
-                        point.copy_(new_point)
-
-                if group["stabilize"] is not None and group["step"] % group["stabilize"] == 0:
-                    self.stabilize_group(group)
+                    # Use copy only for user facing point
+                    point.copy_(new_point)
         return loss
-
-    @torch.no_grad()
-    def stabilize_group(self, group):
-        for p in group["params"]:
-            if not isinstance(p, ManifoldParameter):
-                continue
-            manifold = p.manifold
-            momentum = group["momentum"]
-            p.copy_(manifold.proj(p))
-            if momentum > 0:
-                param_state = self.state[p]
-                if not param_state:  # due to None grads
-                    continue
-                if "momentum_buffer" in param_state:
-                    buf = param_state["momentum_buffer"]
-                    # FIXME: Must implement proju
-                    buf.copy_(manifold.proju(p, buf))
