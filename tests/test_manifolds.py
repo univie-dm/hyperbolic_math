@@ -270,107 +270,46 @@ def test_expmap_retraction_logmap(manifold: Union[Euclidean, Hyperboloid, Poinca
         rtol=rtol
     )
 
-# TODO:
-@pytest.mark.skip(reason="not implemented yet")
 def test_ptransp(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
                  uniform_points: torch.Tensor) -> None:
     """Test the ptransp and ptransp_0 operations."""
     atol, rtol = tolerance
-    pass
-
-    #         test_parallel_transport() -> None:
-    #     mu1 = t([2., 1, np.sqrt(2)]).double() / radius
-    #     mu2 = t([np.sqrt(5), 1, np.sqrt(3)]).double() / radius
-    #     assert is_in_hyp_space(mu1)
-    #     assert is_in_hyp_space(mu2)
-
-    #     u = t([0, 2, -np.sqrt(2)]).double()
-    #     # assert is_in_tangent_space(u, at_point=mu1, eps=test_eps)
-
-    #     assert parallel_transport(u, src=mu1, dst=mu1).allclose(u, atol=5e-4)
-
-    #     pt_u = parallel_transport(u, src=mu1, dst=mu2)
-    #     # assert is_in_tangent_space(pt_u, at_point=mu2, eps=test_eps)
-    #     u_ = parallel_transport(pt_u, src=mu2, dst=mu1)
-    #     assert u.allclose(u_, atol=5e-4)
-    #     u_inv = inverse_parallel_transport(pt_u, src=mu1, dst=mu2)
-    #     assert u.allclose(u_inv)
-
-    # def test_parallel_transport_batch() -> None:
-    #     mu1 = t([2., 1, np.sqrt(2)]) / radius
-    #     mu2 = t([np.sqrt(5), 1, np.sqrt(3)]) / radius
-    #     u = t([0, 2, -np.sqrt(2)])
-    #     u2 = t([0, 4, -2 * np.sqrt(2)])
-
-    #     U = torch.stack((u, u2), dim=0)
-    #     res = parallel_transport(U, src=mu1, dst=mu2)
-    #     U_ = inverse_parallel_transport(res, src=mu1, dst=mu2)
-    #     assert U.allclose(U_, atol=test_eps)
-
-    # def test_parallel_transport_mu0() -> None:
-    #     mu0 = t([0., 0, 0])
-    #     mu2 = t([np.sqrt(5), 1, np.sqrt(3)]) / radius
-    #     u = t([0, 2, -np.sqrt(2)])
-
-    #     assert P.parallel_transport_mu0(u, dst=mu0, radius=radius).allclose(u)
-
-    #     pt_u = P.parallel_transport_mu0(u, dst=mu2, radius=radius)
-    #     assert parallel_transport(u, src=mu0, dst=mu2).allclose(pt_u)
-
-    #     u_inv = P.inverse_parallel_transport_mu0(pt_u, src=mu2, radius=radius)
-    #     assert u.allclose(u_inv)
-
-    # def test_parallel_transport_mu0_batch() -> None:
-    #     mu2 = radius * t([np.sqrt(5), 1, np.sqrt(3)])
-    #     u = t([0, 2, -np.sqrt(2)])
-    #     u2 = t([0, 4, -2 * np.sqrt(2)])
-
-    #     U = torch.stack((u, u2), dim=0)
-    #     res = P.parallel_transport_mu0(U, dst=mu2, radius=radius)
-    #     U_ = P.inverse_parallel_transport_mu0(res, src=mu2, radius=radius)
-    #     assert U.allclose(U_)
-
-    # def test_transp0_preserves_inner_products(a, manifold):
-    #     # pointing to the center
-    #     v_0 = torch.rand_like(a) + 1e-5
-    #     u_0 = torch.rand_like(a) + 1e-5
-    #     zero = torch.zeros_like(a)
-    #     v_a = manifold.transp0(a, v_0)
-    #     u_a = manifold.transp0(a, u_0)
-    #     # compute norms
-    #     vu_0 = manifold.inner(zero, v_0, u_0, keepdim=True)
-    #     vu_a = manifold.inner(a, v_a, u_a, keepdim=True)
-    #     np.testing.assert_allclose(vu_a.detach(), vu_0.detach(), atol=1e-6, rtol=1e-6)
-    #     (vu_0 + vu_a).sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
-
-    # def test_transp0_is_same_as_usual(a, manifold):
-    #     # pointing to the center
-    #     v_0 = torch.rand_like(a) + 1e-5
-    #     zero = torch.zeros_like(a)
-    #     v_a = manifold.transp0(a, v_0)
-    #     v_a1 = manifold.transp(zero, a, v_0)
-    #     # compute norms
-    #     np.testing.assert_allclose(v_a.detach(), v_a1.detach(), atol=1e-6, rtol=1e-6)
-    #     (v_a + v_a1).sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
-
-    # def test_transp_a_b(a, b, manifold):
-    #     # pointing to the center
-    #     v_0 = torch.rand_like(a)
-    #     u_0 = torch.rand_like(a)
-    #     v_1 = manifold.transp(a, b, v_0)
-    #     u_1 = manifold.transp(a, b, u_0)
-    #     # compute norms
-    #     vu_1 = manifold.inner(b, v_1, u_1, keepdim=True)
-    #     vu_0 = manifold.inner(a, v_0, u_0, keepdim=True)
-    #     np.testing.assert_allclose(vu_0.detach(), vu_1.detach(), atol=1e-6, rtol=1e-6)
-    #     (vu_0 + vu_1).sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(b.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
+    # Preservation of local geometry under parallel transport
+    if isinstance(manifold, (Euclidean, PoincareBall)):
+        bound = 1_000
+        u = torch.empty_like(uniform_points).uniform_(-bound, bound)
+        v = torch.empty_like(uniform_points).uniform_(-bound, bound)
+        origin = torch.zeros_like(v)
+    else:   # Hyperboloid
+        # TODO: Generate tangent vectors at the origin for the Hyperboloid
+        pytest.skip()
+    assert manifold.is_in_tangent_space(u, origin)
+    assert manifold.is_in_tangent_space(v, origin)
+    u_pt = manifold.ptransp_0(u, uniform_points)
+    assert manifold.is_in_tangent_space(u_pt, uniform_points)
+    v_pt = manifold.ptransp_0(v, uniform_points)
+    assert manifold.is_in_tangent_space(v_pt, uniform_points)
+    torch.testing.assert_close(
+        manifold.tangent_inner(u, v, origin),
+        manifold.tangent_inner(u_pt, v_pt, uniform_points),
+        atol=atol,
+        rtol=rtol
+    )
+    # Consistency of ptransp with ptransp_0
+    torch.testing.assert_close(
+        manifold.ptransp(u, origin, uniform_points),
+        u_pt,
+        atol=atol,
+        rtol=rtol
+    )
+    # Numerical stability
+    torch.testing.assert_close(
+        manifold.ptransp(u_pt, uniform_points, origin),
+        u,
+        atol=atol,
+        rtol=rtol
+    )
+    assert manifold.is_in_tangent_space(manifold.ptransp(u_pt, uniform_points, origin), origin)
 
 def test_tangent_norm(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
                       tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
