@@ -12,7 +12,7 @@ class Hyperboloid(Manifold):
     Convention: -x0^2 + x1^2 + ... + xd^2 = 1/c, xd > 0, with c > 0 and sectional curvature -c.
     """
 
-    def __init__(self, c: torch.Tensor = 1.0, trainable_c: bool=False):
+    def __init__(self, c: torch.Tensor=1., trainable_c: bool=False):
         super().__init__(c, trainable_c)
         self.name = "Hyperboloid"
         self.min_enorm = 1e-15

@@ -10,8 +10,8 @@ class Euclidean(Manifold):
     Euclidean manifold class.
     """
 
-    def __init__(self, c: torch.Tensor = 0.0):
-        super().__init__(c, trainable_c=False)
+    def __init__(self, c: torch.Tensor=0.):
+        super().__init__(torch.tensor(0.), trainable_c=False)
         self.name = "Euclidean"
 
     def addition(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -40,7 +40,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         r : torch.Tensor
-            scalar factor(s)
+            Scalar factor(s)
         x : torch.Tensor
             Euclidean manifold point(s)
 
@@ -137,7 +137,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             Euclidean manifold point(s)
 
@@ -157,7 +157,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space of the Euclidean origin
+            Vector(s) in the tangent space of the Euclidean origin
 
         Returns
         -------
@@ -169,13 +169,13 @@ class Euclidean(Manifold):
 
     def retraction(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """
-        First-order approximation of the exponential map for vector(s) v at manifold point(s) x.
+        First-order approximation of the exponential map for vector(s) v at Euclidean manifold point(s) x.
         [Retraction map]
 
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             Euclidean manifold point(s)
 
@@ -233,7 +233,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             Euclidean manifold point(s)
         y : torch.Tensor
@@ -255,7 +255,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space of the Euclidean origin
+            Vector(s) in the tangent space of the Euclidean origin
         y : torch.Tensor
             Euclidean manifold point(s)
 
@@ -275,9 +275,9 @@ class Euclidean(Manifold):
         Parameters
         ----------
         u : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             Euclidean manifold point(s)
 
@@ -298,7 +298,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             Euclidean manifold point(s)
 
@@ -336,7 +336,7 @@ class Euclidean(Manifold):
         Parameters
         ----------
         x : torch.Tensor
-            point(s)
+            Point(s)
 
         Returns
         -------
@@ -359,6 +359,25 @@ class Euclidean(Manifold):
         -------
         res : bool
             True if all points x lie in the Euclidean manifold, False otherwise
+        """
+        res = True
+        return res
+
+    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor) -> bool:
+        """
+        Check if vector(s) v belong to the tangent space(s) at Euclidean manifold point(s) x.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s)
+        x : torch.Tensor
+            Euclidean manifold point(s)
+
+        Returns
+        -------
+        res : bool
+            True if all ectors v belong to their tangent spaces, False otherwise
         """
         res = True
         return res

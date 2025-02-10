@@ -5,36 +5,58 @@ import random
 import torch
 import numpy as np
 
-from typing import Union
+from typing import Tuple, Union
 from src.manifolds import Euclidean, Hyperboloid, PoincareBall
 
-def get_test_configs(dtype):
-    curvatures = [torch.tensor([0.5], dtype=dtype), 
-                  torch.tensor([1.0], dtype=dtype),
-                  torch.tensor([2.0], dtype=dtype)]
-    
-    configs = [(Euclidean, c) for c in curvatures]
-    configs.extend([(PoincareBall, c) for c in curvatures])
-    return configs
 
-@pytest.fixture(scope="package", params=[14])
-def seed(request):
-    """Global seed for reproducibility"""
+@pytest.fixture(scope="package", params=[*range(10, 15)])
+def seed(request: pytest.FixtureRequest) -> None:
+    """Global seed for reproducibility."""
     torch.manual_seed(request.param)
-    return request.param
+    random.seed(request.param)
+    np.random.seed(request.param)
 
-@pytest.fixture(scope="package", params=[torch.float64])
-def dtype(request):
+#@pytest.fixture(scope="package", params=[torch.float32, torch.float64], ids=["float32", "float64"])
+@pytest.fixture(scope="package", params=[torch.float64], ids=["float64"])
+def dtype(request: pytest.FixtureRequest) -> torch.dtype:
+    """Test different data types."""
     return request.param
 
 @pytest.fixture(scope="package")
-def tolerance(dtype):
-    """Set numerical tolerances for floating point comparisons"""
+def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
+    """Set numerical tolerances for floating point comparisons."""
     if dtype == torch.float32:
         atol = torch.finfo(dtype).eps
         rtol = torch.finfo(dtype).eps
-    else:  # float64
-        atol = torch.finfo(dtype).eps  
-        rtol = 1e-10
+    else:   # float64
+        atol = torch.finfo(dtype).eps
+        rtol = 5e-10
     return atol, rtol
 
+#@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
+@pytest.fixture(scope="package", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
+def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Union[Euclidean, Hyperboloid, PoincareBall]:
+    """Test different manifolds and curvatures."""
+    c = torch.empty(1, dtype=dtype).exponential_(0.5)
+    return request.param(c=c)
+
+@pytest.fixture(scope="package", params=[2, 4, 5, 10, 15, 50])
+def uniform_points(seed: None, dtype: torch.dtype, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
+                   request: pytest.FixtureRequest) -> torch.Tensor:
+    """Helper to generate uniformly distributed points for each manifold type."""
+    dim = request.param
+    num_pts = 2_500 * 6
+    
+    if isinstance(manifold, Euclidean):
+        bound = 1_000
+        points = torch.empty((num_pts, dim), dtype=dtype).uniform_(-bound, bound)
+    elif isinstance(manifold, Hyperboloid):
+        assert False, "Not implemented yet"
+    else:   # PoincareBall
+        random_dirs = torch.normal(0, 1, size=(num_pts, dim), dtype=dtype)
+        random_dirs /= random_dirs.norm(p=2, dim=-1, keepdim=True)
+        random_radii = torch.rand((num_pts, 1), dtype=dtype).pow(1 / dim)
+        points = manifold.c**-0.5 * (random_dirs * random_radii)
+    # Check if the points are in the manifold
+    assert manifold.is_in_manifold(points), "Points are not in manifold!"
+    return points

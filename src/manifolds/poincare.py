@@ -13,10 +13,12 @@ class PoincareBall(Manifold):
     Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
     """
 
-    def __init__(self, c: torch.Tensor = 1.0, trainable_c: bool=False):
+    def __init__(self, c: torch.Tensor=1., trainable_c: bool=False):
         super().__init__(c, trainable_c)
         self.name = "PoincareBall"
         self.min_enorm = 1e-15
+        # Numerical Stable Unittests
+        # Float64: 1e-15 < max_enorm_eps < 1e-07
         self.max_enorm_eps = 5e-15
 
     def _lambda(self, x: torch.Tensor) -> torch.Tensor:
@@ -111,6 +113,8 @@ class PoincareBall(Manifold):
         Stability
         ---------
         Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
+
+        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
         y2 = y.pow(2).sum(dim=-1, keepdim=True)
@@ -118,6 +122,7 @@ class PoincareBall(Manifold):
         num = (1 + 2 * self.c * xy + self.c * y2) * x + (1 - self.c * x2) * y
         denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
         res = num / denom
+        res = self.proj(res)
         return res
 
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -127,7 +132,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         r : torch.Tensor
-            scalar factor(s)
+            Scalar factor(s)
         x : torch.Tensor
             PoincareBall point(s)
 
@@ -291,7 +296,7 @@ class PoincareBall(Manifold):
         y : torch.Tensor
             PoincareBall point(s)
         version : str
-            version of the geodesic distance to compute (default: "mobius")
+            Version of the geodesic distance to compute (default: "mobius")
             ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
 
         Returns
@@ -342,7 +347,7 @@ class PoincareBall(Manifold):
         x : torch.Tensor
             PoincareBall point(s)
         version : str
-            version of the geodesic distance to compute (default: "mobius")
+            Version of the geodesic distance to compute (default: "mobius")
             ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
 
         Returns
@@ -383,7 +388,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
 
@@ -433,7 +438,7 @@ class PoincareBall(Manifold):
             # c_norm_prod = self.c.sqrt() * v_norm
             # second_term = tanh(c_norm_prod * self._lambda(x) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
 
-        # Apply backprojection if the second term of the addition is rounded to the boundary
+        # Apply backprojection to the second term and the sum (via addition)
         second_term = self.proj(second_term)
         res = self.addition(x, second_term)
         return res
@@ -446,7 +451,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space of the PoincareBall origin
+            Vector(s) in the tangent space of the PoincareBall origin
 
         Returns
         -------
@@ -495,7 +500,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
 
@@ -617,7 +622,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
         y : torch.Tensor
@@ -649,7 +654,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space of the PoincareBall origin
+            Vector(s) in the tangent space of the PoincareBall origin
         y : torch.Tensor
             PoincareBall point(s)
 
@@ -679,9 +684,9 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         u : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
 
@@ -714,7 +719,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         v : torch.Tensor
-            vector(s) in the tangent space(s) of x
+            Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
 
@@ -771,7 +776,7 @@ class PoincareBall(Manifold):
         Parameters
         ----------
         x : torch.Tensor
-            point(s)
+            Point(s)
 
         Returns
         -------
@@ -818,6 +823,25 @@ class PoincareBall(Manifold):
         x2 = x.pow(2).sum(dim=-1, keepdim=True)
         r2 = torch.ones_like(x2) / self.c
         res = torch.all(x2 < r2)
+        return res
+
+    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor) -> bool:
+        """
+        Check if vector(s) v belong to the tangent space(s) at PoincareBall point(s) x.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s)
+        x : torch.Tensor
+            PoincareBall point(s)
+
+        Returns
+        -------
+        res : bool
+            True if all vectors v belong to their tangent spaces, False otherwise
+        """
+        res = True
         return res
 
     ################

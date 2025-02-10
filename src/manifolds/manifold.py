@@ -8,7 +8,7 @@ from typing import Union
 class Manifold:
     """Abstract manifold class."""
 
-    def __init__(self, c: torch.Tensor=1.0, trainable_c: bool=False):
+    def __init__(self, c: torch.Tensor=1., trainable_c: bool=False):
         if trainable_c:
             self.c = torch.nn.Parameter(c)
         else:
@@ -90,6 +90,10 @@ class Manifold:
 
     def is_in_manifold(self, x: torch.Tensor) -> bool:
         """Check if point(s) x lie on the manifold."""
+        raise NotImplementedError
+
+    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor) -> bool:
+        """Check if vector(s) v belong to the tangent space(s) at manifold point(s) x."""
         raise NotImplementedError
 
 
