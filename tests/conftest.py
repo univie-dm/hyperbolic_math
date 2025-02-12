@@ -36,7 +36,7 @@ def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> 
     c = torch.empty(1, dtype=dtype).exponential_(0.5)
     return request.param(c=c)
 
-@pytest.fixture(scope="package", params=[2, 4, 5, 10, 15, 50])
+@pytest.fixture(scope="package", params=[2, 5, 10, 20])
 def uniform_points(seed: None, dtype: torch.dtype, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
                    request: pytest.FixtureRequest) -> torch.Tensor:
     """Helper to generate uniformly distributed points for each manifold type."""

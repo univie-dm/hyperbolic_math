@@ -1,6 +1,6 @@
 import torch.optim
 
-from typing import Tuple
+from typing import Any, Dict, Iterable, Tuple, Union
 from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
 
 
@@ -32,9 +32,6 @@ class RiemannianAdam(torch.optim.Adam):
 
     Other Parameters
     ----------------
-    c : torch.Tensor
-        Curvature parameter of the manifold
-        (Currently removed)
     expmap_update : bool = False
         Update the parameters with exponential map instead of retraction
 
@@ -50,7 +47,7 @@ class RiemannianAdam(torch.optim.Adam):
 
     def __init__(
         self,
-        params,
+        params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]],
         lr: float,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
@@ -79,10 +76,7 @@ class RiemannianAdam(torch.optim.Adam):
         super().__init__(params, **defaults)
         self.expmap_update = expmap_update
 
-    def step(self, closure=None):
-        loss = None
-        if closure is not None:
-            loss = closure()
+    def step(self) -> None:
         with torch.no_grad():
             for group in self.param_groups:
                 betas = group["betas"]
@@ -157,5 +151,3 @@ class RiemannianAdam(torch.optim.Adam):
                     # Use copy only for user facing point
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)
-
-        return loss
