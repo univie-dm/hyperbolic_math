@@ -1,10 +1,8 @@
-import random
 import pytest
 import torch
 
 from typing import Tuple, Union
 from src.manifolds import Euclidean, Hyperboloid, PoincareBall
-from .conftest import seed, manifold, tolerance, uniform_points
 
 
 def test_addition(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
@@ -50,7 +48,7 @@ def test_scalar_mul(seed: None, manifold: Union[Euclidean, Hyperboloid, Poincare
         manifold.scalar_mul(identity, uniform_points), uniform_points, atol=atol, rtol=rtol
     )
     # N-Gyroaddition
-    n = random.randint(3, 10)
+    n = torch.randint(3, 10, (1,)).item()
     n_sum = torch.zeros_like(uniform_points)
     for _ in range(n):
         n_sum = manifold.addition(n_sum, uniform_points)
@@ -131,63 +129,33 @@ def test_scalar_mul(seed: None, manifold: Union[Euclidean, Hyperboloid, Poincare
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
-@pytest.mark.skip(reason="not implemented yet")
-def test_matvec_mul(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
-                    uniform_points: torch.Tensor) -> None:
+def test_matvec_mul(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
+                    tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
     """Test the matvec_mul operation."""
     atol, rtol = tolerance
-    pass
-    # def test_matvec_zeros(a, manifold):
-    #     mat = a.new_zeros((3, a.shape[-1]))
-    #     z = manifold.mobius_matvec(mat, a)
-    #     np.testing.assert_allclose(z.detach(), 0.0)
-    #     z.sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
-
-    # def test_matvec_via_equiv_fn_apply(a, negative, manifold, strict, dtype):
-    #     mat = a.new(3, a.shape[-1]).normal_()
-    #     y = manifold.mobius_fn_apply(lambda x: x @ mat.transpose(-1, -2), a)
-    #     y1 = manifold.mobius_matvec(mat, a)
-    #     tolerance = {torch.float32: dict(atol=1e-5, rtol=1e-5), torch.float64: dict()}
-
-    #     tolerant_allclose_check(y, y1, strict=strict, **tolerance[dtype])
-    #     y.sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
-
-    # def test_mobiusify(a, c, negative, strict, dtype):
-    #     mat = a.new(3, a.shape[-1]).normal_()
-
-    #     @stereographic.math.mobiusify
-    #     def matvec(x):
-    #         return x @ mat.transpose(-1, -2)
-
-    #     y = matvec(a, k=-c)
-    #     y1 = stereographic.math.mobius_matvec(mat, a, k=-c)
-    #     tolerance = {torch.float32: dict(atol=1e-5, rtol=1e-5), torch.float64: dict()}
-
-    #     tolerant_allclose_check(y, y1, strict=strict, **tolerance[dtype])
-    #     y.sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(c.grad).all()
-
-    # def test_matvec_chain_via_equiv_fn_apply(a, negative, manifold, dtype):
-    #     mat1 = a.new(a.shape[-1], a.shape[-1]).normal_()
-    #     mat2 = a.new(a.shape[-1], a.shape[-1]).normal_()
-    #     y = manifold.mobius_fn_apply_chain(
-    #         a,
-    #         lambda x: x @ mat1.transpose(-1, -2),
-    #         lambda x: x @ mat2.transpose(-1, -2),
-    #     )
-    #     y1 = manifold.mobius_matvec(mat1, a)
-    #     y1 = manifold.mobius_matvec(mat2, y1)
-    #     tolerance = {torch.float32: dict(atol=1e-5, rtol=1e-5), torch.float64: dict()}
-
-    #     tolerant_allclose_check(y, y1, strict=negative, **tolerance[dtype])
-    #     y.sum().backward()
-    #     assert torch.isfinite(a.grad).all()
-    #     assert torch.isfinite(manifold.k.grad).all()
+    m1 = torch.randn(uniform_points.shape[-1], 10, dtype=uniform_points.dtype)
+    m2 = torch.randn(m1.shape[-1], 7, dtype=uniform_points.dtype)
+    # Consistency of matvec_mul with expmap_0 and logmap_0
+    torch.testing.assert_close(
+        manifold.matvec_mul(m1, uniform_points),
+        manifold.expmap_0(manifold.logmap_0(uniform_points) @ m1),
+        atol=atol,
+        rtol=rtol
+    )
+    # Matvec identity
+    torch.testing.assert_close(
+        manifold.matvec_mul(torch.zeros_like(m1), uniform_points),
+        torch.zeros((uniform_points.shape[0], m1.shape[-1]), dtype=uniform_points.dtype),
+        atol=atol,
+        rtol=rtol
+    )
+    # Matrix associativity
+    torch.testing.assert_close(
+        manifold.matvec_mul(m2, manifold.matvec_mul(m1, uniform_points)),
+        manifold.expmap_0(manifold.logmap_0(uniform_points) @ (m1 @ m2)),
+        atol=atol,
+        rtol=rtol
+    )
 
 @pytest.mark.skip(reason="not implemented yet")
 def test_hyperplane_forward(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],

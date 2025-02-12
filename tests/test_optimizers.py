@@ -10,7 +10,7 @@ from src.optim import RiemannianAdam, RiemannianSGD
 def test_riemannian_adam(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
                          uniform_points: torch.Tensor, expmap_update: bool) -> None:
     """Test the RiemannianAdam for convergence."""
-    atol, rtol = tolerance
+    atol, _ = tolerance
     target = uniform_points[0, :]
     start = manifold.scalar_mul(0.9, target)
     start = ManifoldParameter(start, requires_grad=True, manifold=manifold)

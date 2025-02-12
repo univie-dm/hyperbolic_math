@@ -193,34 +193,14 @@ class PoincareBall(Manifold):
         TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
         ||x||-> 0 implies that ||Mx|| -> 0 for reasonably bounded M
         ||Mx|| -> 0 may cause problems if ||x|| is very large. How to deal with this?
+
         Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         sqrt_c = self.c.sqrt()
         mx = x @ m
-        x_norm = x.norm(p=2, dim=-1, keepdim=True)
-        mx_norm = mx.norm(p=2, dim=-1, keepdim=True)
-        res = tanh(artanh(sqrt_c * x_norm) / x_norm * mx_norm) / (mx_norm * sqrt_c) * mx
-
-        condition = (mx == 0).prod(-1, keepdim=True, dtype=torch.uint8)
-        res_0 = torch.zeros(1, dtype=res.dtype, device=res.device)
-        res_1 = torch.where(condition, res_0, res)
-
-        if not torch.equal(res, res_1):
-            # Pretty sure its the same, but why did geoopt do the res_1 way?
-            print(f"res {res}")
-            print(f"res_1 {res_1}")
-
-        if not torch.all(torch.isfinite(res)):
-            print(f"matvec_mul: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
-            # Stable case
-            x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
-            mx_norm = mx.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
-            res_c = tanh(mx_norm / x_norm * artanh(sqrt_c * x_norm)) / (mx_norm * sqrt_c) * mx
-            condition = (mx == 0).prod(-1, keepdim=True, dtype=torch.uint8)
-            res_0 = torch.zeros(1, dtype=res_c.dtype, device=res_c.device)
-            res = torch.where(condition, res_0, res_c)
-        
+        x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+        mx_norm = mx.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+        res = tanh(artanh(sqrt_c * x_norm) / x_norm * mx_norm ) / (sqrt_c * mx_norm) * mx
         res = self.proj(res)
         return res
 

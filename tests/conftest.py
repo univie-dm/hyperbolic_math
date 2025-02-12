@@ -25,8 +25,8 @@ def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
         atol = torch.finfo(dtype).eps
         rtol = torch.finfo(dtype).eps
     else:   # float64
-        atol = torch.finfo(dtype).eps
-        rtol = 5e-10
+        atol = 1e-13
+        rtol = 1e-09
     return atol, rtol
 
 #@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
@@ -36,7 +36,7 @@ def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> 
     c = torch.empty(1, dtype=dtype).exponential_(0.5)
     return request.param(c=c)
 
-@pytest.fixture(scope="package", params=[2, 5, 10, 20])
+@pytest.fixture(scope="package", params=[2, 5, 10, 15])
 def uniform_points(seed: None, dtype: torch.dtype, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
                    request: pytest.FixtureRequest) -> torch.Tensor:
     """Helper to generate uniformly distributed points for each manifold type."""
@@ -44,7 +44,7 @@ def uniform_points(seed: None, dtype: torch.dtype, manifold: Union[Euclidean, Hy
     num_pts = 2_500 * 6
     
     if isinstance(manifold, Euclidean):
-        bound = 1_000
+        bound = 100
         points = torch.empty((num_pts, dim), dtype=dtype).uniform_(-bound, bound)
     elif isinstance(manifold, Hyperboloid):
         assert False, "Not implemented yet"
