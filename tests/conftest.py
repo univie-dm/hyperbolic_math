@@ -1,9 +1,7 @@
 """This file contains global fixtures that are used across all our tests."""
 
 import pytest
-import random
 import torch
-import numpy as np
 
 from typing import Tuple, Union
 from src.manifolds import Euclidean, Hyperboloid, PoincareBall
@@ -13,8 +11,6 @@ from src.manifolds import Euclidean, Hyperboloid, PoincareBall
 def seed(request: pytest.FixtureRequest) -> None:
     """Global seed for reproducibility."""
     torch.manual_seed(request.param)
-    random.seed(request.param)
-    np.random.seed(request.param)
 
 #@pytest.fixture(scope="package", params=[torch.float32, torch.float64], ids=["float32", "float64"])
 @pytest.fixture(scope="package", params=[torch.float64], ids=["float64"])

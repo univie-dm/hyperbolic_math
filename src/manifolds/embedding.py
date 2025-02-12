@@ -1,11 +1,11 @@
 import torch
 
 from typing import Literal, get_args
-from .manifold import Manifold, ManifoldParameter
-from .poincare import PoincareBall
+from manifolds import Manifold, ManifoldParameter, Euclidean, Hyperboloid, PoincareBall
 
 
 ForwardPassType = Literal[
+    None,
     "hyperplane_forward",
     "hyperplane_forward_correct",
     "hyperplane_forward_pp",
@@ -29,31 +29,38 @@ class Embedding(torch.nn.Module):
         output_dim: int,
         manifold: Manifold,
         requires_grad: bool = True,
-        forward_method: ForwardPassType = "hyperplane_forward",
+        forward_method: ForwardPassType = None,
     ):
         super().__init__()
         self.manifold = manifold
-
-        self._sanity_checks(forward_method)
-        # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
-        self.forward_method = getattr(self, f"forward_{forward_method}")
+        if ForwardPassType:
+            self._sanity_checks(forward_method)
+            # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
+            self.forward_method = getattr(self, f"forward_{forward_method}")
+        # Defaults
+        elif isinstance(self.manifold, Euclidean):
+            self.forward_method = getattr(self, "forward_matvec_mul")
+        elif isinstance(self.manifold, Hyperboloid):
+            assert False, "Not implemented yet"
+        else:  # PoincareBall
+            self.forward_method = getattr(self, "forward_hyperplane_forward")
 
         weight = torch.randn(input_dim, output_dim)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        if forward_method in {"hyperplane_forward", "hyperplane_forward_correct", "hyperplane_forward_pp"}:
-            bias = torch.zeros(input_dim)
-        elif forward_method in {"matvec_mul", "hnn_matvec_mul"}:
+        if forward_method in {"matvec_mul", "hnn_matvec_mul"} or isinstance(self.manifold, Euclidean):
             bias = torch.zeros(output_dim)
+        else: # PoincareBall hyperplane forward methods
+            bias = torch.zeros(input_dim)
         self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
 
     def _sanity_checks(self, forward_method: ForwardPassType) -> None:
         """Sanity checks to ensure correct initialization and forward method"""
         assert forward_method in get_args(ForwardPassType), f"Invalid forward method: {forward_method}"
 
-        if forward_method in {"hyperplane_forward", "hyperplane_forward_correct", "hyperplane_forward_pp"}:
-            assert isinstance(self.manifold, PoincareBall), "hyperplane_forward methods only work for PoincareBall manifolds"
-        if forward_method == "hyperplane_forward_pp":
+        if forward_method == "hyperplane_forward_correct":
+            assert isinstance(self.manifold, PoincareBall), "custom hyperplane_forward methods only work for PoincareBall manifolds"
+        elif forward_method == "hyperplane_forward_pp":
             assert False, "Not implemented yet"
 
     def forward_hyperplane_forward(self, x: torch.Tensor) -> torch.Tensor:
