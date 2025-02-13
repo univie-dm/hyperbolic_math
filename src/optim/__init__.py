@@ -1,2 +1,2 @@
-from .riemann_sgd import RiemannianSGD
-from .riemann_adam import RiemannianAdam
+from .riemannian_sgd import RiemannianSGD
+from .riemannian_adam import RiemannianAdam
