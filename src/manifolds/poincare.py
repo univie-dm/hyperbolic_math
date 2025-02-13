@@ -116,13 +116,7 @@ class PoincareBall(Manifold):
 
         Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
-        x2 = x.pow(2).sum(dim=-1, keepdim=True)
-        y2 = y.pow(2).sum(dim=-1, keepdim=True)
-        xy = (x * y).sum(dim=-1, keepdim=True)
-        num = (1 + 2 * self.c * xy + self.c * y2) * x + (1 - self.c * x2) * y
-        denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
-        res = num / denom
-        res = self.proj(res)
+        res = addition_compiled(x, y, self.c, self.max_enorm_eps)
         return res
 
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -293,7 +287,8 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
-        return dist_compiled(x, y, self.c, version, self.min_enorm, self.max_enorm_eps)
+        res = dist_compiled(x, y, self.c, version, self.min_enorm, self.max_enorm_eps)
+        return res
 
     def dist_0(self, x: torch.Tensor, version: str="mobius") -> torch.Tensor:
         """
@@ -321,8 +316,9 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
-        return dist_0_compiled(x, self.c, version, self.min_enorm)
-
+        res = dist_0_compiled(x, self.c, version, self.min_enorm)
+        return res
+    
     def expmap(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """
         Map tangent vector(s) v at PoincareBall point(s) x to the clipped PoincareBall.
@@ -736,17 +732,7 @@ class PoincareBall(Manifold):
         TODO:
         Precision depends on c
         """
-        # BUG: Must clamp like them to get their results, can't use enorm here
-        if x.dtype == torch.float32:
-            eps = 4e-3
-        else:
-            eps = self.max_enorm_eps
-        max_enorm = (1 / self.c.sqrt()).to(x.dtype) - eps
-        assert max_enorm < (1 / self.c.sqrt()).to(x.dtype)
-        x_norm = x.norm(p=2, dim=-1, keepdim=True)
-        proj_x = (max_enorm / x_norm) * x
-        condition = x_norm > max_enorm
-        res = torch.where(condition, proj_x, x)
+        res = proj_compiled(x, self.c, self.max_enorm_eps)
         return res
 
     def is_in_manifold(self, x: torch.Tensor) -> bool:
