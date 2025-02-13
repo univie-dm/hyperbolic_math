@@ -10,8 +10,8 @@ class Euclidean(Manifold):
     Euclidean manifold class.
     """
 
-    def __init__(self, c: torch.Tensor=0.):
-        super().__init__(torch.tensor(0.), trainable_c=False)
+    def __init__(self, c: torch.Tensor=torch.tensor([0.])):
+        super().__init__(torch.tensor([0.]), trainable_c=False)
         self.name = "Euclidean"
 
     def addition(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:

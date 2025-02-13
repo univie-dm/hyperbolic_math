@@ -8,7 +8,7 @@ from typing import Type
 class Manifold(torch.nn.Module):
     """Abstract manifold class."""
 
-    def __init__(self, c: torch.Tensor=1., trainable_c: bool=False):
+    def __init__(self, c: torch.Tensor=torch.tensor([1.]), trainable_c: bool=False):
         super().__init__()
         if trainable_c:
             self.register_parameter('c', torch.nn.Parameter(c, requires_grad=trainable_c))
