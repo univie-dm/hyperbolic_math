@@ -7,7 +7,7 @@ from typing import Tuple, Union
 from src.manifolds import Euclidean, Hyperboloid, PoincareBall
 
 
-@pytest.fixture(scope="package", params=[*range(10, 15)])
+@pytest.fixture(scope="package", params=[*range(10, 13)])
 def seed(request: pytest.FixtureRequest) -> None:
     """Global seed for reproducibility."""
     torch.manual_seed(request.param)

@@ -786,30 +786,11 @@ class PoincareBall(Manifold):
     # mobius_pointwise_mul
     # geodesic_unit
 
+
 @torch.jit.script
 def proj_compiled(x: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> torch.Tensor:
     """
-    Project point(s) x onto the clipped PoincareBall by restricting the Euclidean norm(s) to 1/c.sqrt()-self.max_enorm_eps.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Point(s)
-
-    Returns
-    -------
-    res : torch.Tensor
-        The projected PoincareBall point(s)
-
-    References
-    ----------
-    Nickel, Maximillian, and Douwe Kiela. "Poincaré embeddings for learning hierarchical representations."
-        Advances in neural information processing systems 30 (2017).
-
-    Stability
-    ---------
-    TODO:
-    Precision depends on c
+    Script compiled version of the proj method.
     """
     # BUG: Must clamp like them to get their results, can't use enorm here
     if x.dtype == torch.float32:
@@ -827,30 +808,7 @@ def proj_compiled(x: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> tor
 @torch.jit.script
 def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> torch.Tensor:
     """
-    Add PoincareBall point(s) y to PoincareBall point(s) x using mobius gyrovector addition.
-    Non-commutative and non-associative!
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        PoincareBall point(s)
-    y : torch.Tensor
-        PoincareBall point(s)
-
-    Returns
-    -------
-    res : torch.Tensor
-        The sum(s) of x and y
-
-    References
-    ----------
-    Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
-
-    Stability
-    ---------
-    Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
-
-    Backprojection via self.proj() is applied if the result would be rounded to the boundary.
+    Script compiled version of the addition method.
     """
     x2 = x.pow(2).sum(dim=-1, keepdim=True)
     y2 = y.pow(2).sum(dim=-1, keepdim=True)
@@ -866,7 +824,6 @@ def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: st
     """
     Script compiled version of the dist method.
     """
-
     if version == "mobius":
         # Mobius-dist
         sqrt_c = c.sqrt()
@@ -896,7 +853,6 @@ def dist_0_compiled(x: torch.Tensor, c: torch.Tensor, version: str, min_enorm: f
     """
     Script compiled version of the dist_0 method.
     """
-
     if version in ["mobius", "mobius_symmetric"]:
         # Mobius-dist/Symmetrized mobius-dist
         sqrt_c = c.sqrt()
