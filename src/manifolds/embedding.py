@@ -1,7 +1,10 @@
 import torch
 
 from typing import Literal, get_args
-from manifolds import Manifold, ManifoldParameter, Euclidean, Hyperboloid, PoincareBall
+from .manifold import Manifold, ManifoldParameter
+from .euclidean import Euclidean 
+from .hyperboloid import Hyperboloid
+from .poincare import PoincareBall
 
 
 ForwardPassType = Literal[
