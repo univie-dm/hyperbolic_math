@@ -13,7 +13,7 @@ class Manifold(torch.nn.Module):
         if trainable_c:
             self.register_parameter('c', torch.nn.Parameter(c, requires_grad=trainable_c))
         else:
-            self.c = c
+            self.register_buffer('c', c)
         self.min_enorm = None
         self.max_enorm_eps = None
 
