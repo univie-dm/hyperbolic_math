@@ -89,7 +89,7 @@ class PoincareBall(Manifold):
         res = z + num / denom
         return res
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def addition(self, x: torch.Tensor, y: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         Add PoincareBall point(s) y to PoincareBall point(s) x using mobius gyrovector addition.
         Non-commutative and non-associative!
@@ -100,6 +100,8 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         y : torch.Tensor
             PoincareBall point(s)
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -113,13 +115,11 @@ class PoincareBall(Manifold):
         Stability
         ---------
         Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
-
-        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
-        res = addition_compiled(x, y, self.c, self.max_enorm_eps)
+        res = addition_compiled(x, y, self.c, self.max_enorm_eps, backproject)
         return res
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         Multiply PoincareBall point(s) x with scalar(s) r.
 
@@ -129,6 +129,8 @@ class PoincareBall(Manifold):
             Scalar factor(s)
         x : torch.Tensor
             PoincareBall point(s)
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -144,8 +146,6 @@ class PoincareBall(Manifold):
         ---------
         The PoincareBall multiplication converges towards the tangent space multiplication
         as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
-        
-        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         x_norm = x.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = self.c.sqrt() * x_norm
@@ -158,10 +158,11 @@ class PoincareBall(Manifold):
             c_norm_prod = self.c.sqrt() * x_norm
             res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
 
-        res = self.proj(res)
+        if backproject:
+            res = self.proj(res)
         return res
 
-    def matvec_mul(self, m: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def matvec_mul(self, m: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         Multiply PoincareBall point(s) x with (Euclidean) matrix m from the left.
 
@@ -171,6 +172,8 @@ class PoincareBall(Manifold):
             (Euclidean) matrix
         x : torch.Tensor
             PoincareBall point(s)
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -187,19 +190,19 @@ class PoincareBall(Manifold):
         TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
         ||x||-> 0 implies that ||Mx|| -> 0 for reasonably bounded M
         ||Mx|| -> 0 may cause problems if ||x|| is very large. How to deal with this?
-
-        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         sqrt_c = self.c.sqrt()
         mx = x @ m
         x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
         mx_norm = mx.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
         res = tanh(artanh(sqrt_c * x_norm) / x_norm * mx_norm ) / (sqrt_c * mx_norm) * mx
-        res = self.proj(res)
+
+        if backproject:
+            res = self.proj(res)
         return res
 
     def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor,
-                           signed: bool = False, scaled: bool = False) -> torch.Tensor:
+                           signed: bool = False, scaled: bool = False, backproject=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -215,9 +218,12 @@ class PoincareBall(Manifold):
         res = arsinh(num / denom) / sqrt_c
         if scaled:
             res = res * m_norm
+
+        if backproject:
+            res = self.proj(res)
         return res
-    
-    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+
+    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -234,9 +240,12 @@ class PoincareBall(Manifold):
         denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
         dist2hyp = arsinh(self._lambda(sub, self.c) * sqrt_c * msub.abs() / denom) / sqrt_c
         res = orientation * dist2hyp * m_norm
+
+        if backproject:
+            res = self.proj(res)
         return res
 
-    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -249,17 +258,17 @@ class PoincareBall(Manifold):
         #     arsin_k(
         #         2 / (1 + k * p.pow(2).sum(dim=-2, keepdim=True)).clamp_min(1e-15) * (
         #             torch.matmul(x, z_unit)
-        #             - (1 + 2 * k * torch.matmul(x, p) - k * x2) 
+        #             - (1 + 2 * k * torch.matmul(x, p) - k * x2)
         #             / (1 + k * x2).clamp_min(1e-15)
         #                 * (p * z_unit).sum(dim=-2, keepdim=True)
-        #         ), 
+        #         ),
         #         k
         #         )
         # )
         #return 2 * distance * z_norm
         raise NotImplementedError
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius") -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius", backproject=True) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall points x and y.
 
@@ -272,6 +281,8 @@ class PoincareBall(Manifold):
         version : str
             Version of the geodesic distance to compute (default: "mobius")
             ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -287,7 +298,7 @@ class PoincareBall(Manifold):
         ---------
         Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
         """
-        res = dist_compiled(x, y, self.c, version, self.min_enorm, self.max_enorm_eps)
+        res = dist_compiled(x, y, self.c, version, self.min_enorm, self.max_enorm_eps, backproject=backproject)
         return res
 
     def dist_0(self, x: torch.Tensor, version: str="mobius") -> torch.Tensor:
@@ -319,7 +330,7 @@ class PoincareBall(Manifold):
         res = dist_0_compiled(x, self.c, version, self.min_enorm)
         return res
     
-    def expmap(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at PoincareBall point(s) x to the clipped PoincareBall.
         [Exponential map]
@@ -330,6 +341,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -344,16 +357,14 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
-        
+
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
         since tanh(z) ~ z for small z.
-        
+
         TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
         lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
-        
+
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
-        
-        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = self.c.sqrt() * v_norm
@@ -378,11 +389,12 @@ class PoincareBall(Manifold):
             # second_term = tanh(c_norm_prod * self._lambda(x) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
 
         # Apply backprojection to the second term and the sum (via addition)
-        second_term = self.proj(second_term)
-        res = self.addition(x, second_term)
+        if backproject:
+            second_term = self.proj(second_term)
+        res = self.addition(x, second_term, backproject=backproject)
         return res
 
-    def expmap_0(self, v: torch.Tensor) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at the PoincareBall origin to the clipped PoincareBall.
         [Exponential map]
@@ -391,6 +403,8 @@ class PoincareBall(Manifold):
         ----------
         v : torch.Tensor
             Vector(s) in the tangent space of the PoincareBall origin
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -405,11 +419,9 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
-        
+
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
         since tanh(z) ~ z for small z.
-        
-        Backprojection via self.proj() is applied if the result would be rounded to the boundary.
         """
         v_norm = v.norm(p=2, dim=-1, keepdim=True)
         c_norm_prod = self.c.sqrt() * v_norm
@@ -427,11 +439,12 @@ class PoincareBall(Manifold):
             c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
 
             res = tanh(c_norm_prod) / c_norm_prod * v
-        
-        res = self.proj(res)
+
+        if backproject:
+            res = self.proj(res)
         return res
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
         """
         First-order approximation of the exponential map for vector(s) v at PoincareBall point(s) x.
         [Retraction map]
@@ -442,6 +455,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        backproject : bool
+            Whether to project results back to the PoincareBall (default: True)
 
         Returns
         -------
@@ -453,8 +468,9 @@ class PoincareBall(Manifold):
         Gary Bécigneul and Octavian Ganea. "Riemannian adaptive optimization methods."
             International Conference on Learning Representations (2019).
         """
-        linear_expmap_approx = x + v
-        res = self.proj(linear_expmap_approx)
+        res = x + v
+        if backproject:
+            res = self.proj(res)
         return res
 
     def logmap(self, y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -482,10 +498,10 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
-        
+
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
         since artanh(z) ~ z for small z.
-        
+
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         sub = self.addition(-x, y)
@@ -530,7 +546,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         TODO: check which clamping works better
-        
+
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
         since artanh(z) ~ z for small z.
         """
@@ -806,7 +822,8 @@ def proj_compiled(x: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> tor
     return res
 
 @torch.jit.script
-def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> torch.Tensor:
+def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor,
+                      max_enorm_eps: float, backproject=True) -> torch.Tensor:
     """
     Script compiled version of the addition method.
     """
@@ -816,25 +833,27 @@ def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, max_eno
     num = (1 + 2 * c * xy + c * y2) * x + (1 - c * x2) * y
     denom = 1 + 2 * c * xy + c**2 * x2 * y2
     res = num / denom
-    res = proj_compiled(res, c, max_enorm_eps)
+    if backproject:
+        res = proj_compiled(res, c, max_enorm_eps)
     return res
 
 @torch.jit.script
-def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str, min_enorm: float, max_enorm_eps: float) -> torch.Tensor:
+def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str,
+                  min_enorm: float, max_enorm_eps: float, backproject=True) -> torch.Tensor:
     """
     Script compiled version of the dist method.
     """
     if version == "mobius":
         # Mobius-dist
         sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps).norm(p=2, dim=-1, keepdim=True))
+        dist_c = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
         res = 2 * dist_c / sqrt_c
     elif version == "mobius_symmetric":
         # TODO check if this is algebraically allowed, numerically OK
         # Symmetrized mobius-dist
         sqrt_c = c.sqrt()
-        dist_c_1 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps).norm(p=2, dim=-1, keepdim=True))
-        dist_c_2 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps).norm(p=2, dim=-1, keepdim=True))
+        dist_c_1 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
+        dist_c_2 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
         res = (dist_c_1 + dist_c_2) / sqrt_c
     elif version == "metric_tensor":
         # Metric-tensor-induced-dist
