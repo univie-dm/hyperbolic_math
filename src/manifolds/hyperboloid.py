@@ -9,23 +9,14 @@ from ..utils.math_utils import arcosh, cosh, sinh
 class Hyperboloid(Manifold):
     """
     Hyperboloid manifold class.
-
-    We use the following convention: -x0^2 + x1^2 + ... + xd^2 = -K
-
-    c = 1 / K is the hyperbolic curvature.
-    
-    Parameters
-    ----------
-    dtype : torch.dtype
-        Data type that is used for the computations. Sets the tolerances for numerical errors.
+    Convention: -x0^2 + x1^2 + ... + xd^2 = 1/c, xd > 0, with c > 0 and sectional curvature -c.
     """
 
-    def __init__(self):
-        super(Hyperboloid, self).__init__()
+    def __init__(self, c: torch.Tensor=torch.tensor([1.]), trainable_c: bool=False):
+        super().__init__(c, trainable_c)
         self.name = "Hyperboloid"
-        
-        self.min_enorm = 2e-15
-        self.max_enorm_eps = self.min_enorm
+        self.min_enorm = 1e-15
+        self.max_enorm_eps = 5e-15
 
     def minkowski_dot(self, x, y, keepdim=True):
         res = torch.sum(x * y, dim=-1) - 2 * x[..., 0] * y[..., 0]

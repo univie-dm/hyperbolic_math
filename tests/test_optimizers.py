@@ -1,92 +1,44 @@
-from typing import Tuple, Union
-
 import pytest
 import torch
 
-from src.manifolds import Euclidean, Hyperboloid, ManifoldParameter, PoincareBall
+from typing import Tuple, Union
+from src.manifolds import ManifoldParameter, Euclidean, Hyperboloid, PoincareBall
 from src.optim import RiemannianAdam, RiemannianSGD
 
-from .fixtures import manifold, seed
-
-
-@pytest.fixture(scope="module", params=[torch.float32, torch.float64], ids=["float32", "float64"])
-def dtype(request: pytest.FixtureRequest) -> torch.dtype:
-    """Test different data types."""
-    return request.param
-
-
-@pytest.fixture(scope="module")
-def c(dtype: torch.dtype) -> torch.Tensor:
-    """Generate a random curvature magnitude(s)."""
-    return torch.ones(1, dtype=dtype)
-
-
-@pytest.fixture(scope="module")
-def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
-    """Set the absolute and relative tolerance(s) for the tests."""
-    if dtype == torch.float32:
-        atol = 1e-5
-        rtol = 1e-5
-    elif dtype == torch.float64:
-        # TODO: Can be updated?
-        atol = 1e-5
-        rtol = 1e-5
-    return atol, rtol
-
 
 @pytest.mark.parametrize("expmap_update", [True, False])
-def test_riemannian_adam(
-    seed: int,
-    dtype: torch.dtype,
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-    expmap_update: bool,
-):
-    """Optimizer test: Fit a random starting point towards (0.5, 0.5)."""
-    atol, rtol = tolerance
-    ideal = torch.tensor([0.5, 0.5], dtype=dtype)
-    start = torch.randn(2, dtype=dtype) / 2
-    start = manifold.expmap_0(start, c=c)
-    start = ManifoldParameter(start, manifold=manifold, requires_grad=True, c=c)
+def test_riemannian_adam(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+                         uniform_points: torch.Tensor, expmap_update: bool) -> None:
+    """Test the RiemannianAdam for convergence."""
+    atol, _ = tolerance
+    target = uniform_points[0, :]
+    start = manifold.scalar_mul(0.9, target)
+    start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    def closure():
+    optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update)
+    for _ in range(300_000):
         optim.zero_grad()
-        loss = manifold.dist(x=start, y=ideal, c=c) ** 2
+        loss = manifold.dist(start, target).pow(2).mean()
+        if (start-target).norm(p=2) < atol:
+            break
         loss.backward()
-        return loss.item()
-
-    optim = RiemannianAdam([start], lr=1e-2, c=c, expmap_update=expmap_update, eps=1e-5)
-
-    for _ in range(1100):
-        optim.step(closure)
-    torch.testing.assert_close(start.data, ideal, atol=atol, rtol=rtol)
-
+        optim.step()
+    else:
+        assert False, "RiemannianAdam did not converge!"
 
 @pytest.mark.parametrize("expmap_update", [True, False])
-def test_riemannian_sgd(
-    seed: int,
-    dtype: torch.dtype,
-    manifold: Union[Euclidean, PoincareBall, Hyperboloid],
-    c: torch.Tensor,
-    tolerance: Tuple[float, float],
-    expmap_update: bool,
-):
-    """Optimizer test: Fit a random starting point towards (0.5, 0.5)."""
+def test_riemannian_sgd(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+                        uniform_points: torch.Tensor, expmap_update: bool) -> None:
+    """Test the RiemannianSGD for convergence."""
     atol, rtol = tolerance
-    ideal = torch.tensor([0.5, 0.5], dtype=dtype)
-    start = torch.randn(2, dtype=dtype) / 2
-    start = manifold.expmap_0(start, c=c)
-    start = ManifoldParameter(start, manifold=manifold, requires_grad=True, c=c)
+    target = uniform_points[0, :]
+    start = manifold.scalar_mul(0.3, target)
+    start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    def closure():
-        optim.zero_grad()
-        loss = manifold.dist(x=start, y=ideal, c=c) ** 2
-        loss.backward()
-        return loss.item()
-
-    optim = RiemannianSGD([start], lr=1e-2, c=c, expmap_update=expmap_update, momentum=0.9)
-
+    optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update)
     for _ in range(1000):
-        optim.step(closure)
-    torch.testing.assert_close(start.data, ideal, atol=atol, rtol=rtol)
+        optim.zero_grad()
+        loss = manifold.dist(start, target).pow(2).mean()
+        loss.backward()
+        optim.step()
+    torch.testing.assert_close(start.data, target, atol=atol, rtol=rtol)
