@@ -89,7 +89,7 @@ class PoincareBall(Manifold):
         res = z + num / denom
         return res
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor, backproject=True) -> torch.Tensor:
+    def addition(self, x: torch.Tensor, y: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         Add PoincareBall point(s) y to PoincareBall point(s) x using mobius gyrovector addition.
         Non-commutative and non-associative!
@@ -119,7 +119,7 @@ class PoincareBall(Manifold):
         res = addition_compiled(x, y, self.c, self.max_enorm_eps, backproject)
         return res
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
+    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         Multiply PoincareBall point(s) x with scalar(s) r.
 
@@ -162,7 +162,7 @@ class PoincareBall(Manifold):
             res = self.proj(res)
         return res
 
-    def matvec_mul(self, m: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
+    def matvec_mul(self, m: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         Multiply PoincareBall point(s) x with (Euclidean) matrix m from the left.
 
@@ -202,7 +202,7 @@ class PoincareBall(Manifold):
         return res
 
     def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor,
-                           signed: bool = False, scaled: bool = False, backproject=True) -> torch.Tensor:
+                           signed: bool = False, scaled: bool = False, backproject: bool=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -223,7 +223,7 @@ class PoincareBall(Manifold):
             res = self.proj(res)
         return res
 
-    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject=True) -> torch.Tensor:
+    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -245,7 +245,7 @@ class PoincareBall(Manifold):
             res = self.proj(res)
         return res
 
-    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject=True) -> torch.Tensor:
+    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         #TODO
         """
@@ -268,7 +268,7 @@ class PoincareBall(Manifold):
         #return 2 * distance * z_norm
         raise NotImplementedError
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius", backproject=True) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius", backproject: bool=True) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall points x and y.
 
@@ -330,7 +330,7 @@ class PoincareBall(Manifold):
         res = dist_0_compiled(x, self.c, version, self.min_enorm)
         return res
     
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at PoincareBall point(s) x to the clipped PoincareBall.
         [Exponential map]
@@ -394,7 +394,7 @@ class PoincareBall(Manifold):
         res = self.addition(x, second_term, backproject=backproject)
         return res
 
-    def expmap_0(self, v: torch.Tensor, backproject=True) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at the PoincareBall origin to the clipped PoincareBall.
         [Exponential map]
@@ -444,7 +444,7 @@ class PoincareBall(Manifold):
             res = self.proj(res)
         return res
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor, backproject=True) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
         First-order approximation of the exponential map for vector(s) v at PoincareBall point(s) x.
         [Retraction map]
@@ -823,7 +823,7 @@ def proj_compiled(x: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> tor
 
 @torch.jit.script
 def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor,
-                      max_enorm_eps: float, backproject=True) -> torch.Tensor:
+                      max_enorm_eps: float, backproject: bool=True) -> torch.Tensor:
     """
     Script compiled version of the addition method.
     """
@@ -839,7 +839,7 @@ def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor,
 
 @torch.jit.script
 def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str,
-                  min_enorm: float, max_enorm_eps: float, backproject=True) -> torch.Tensor:
+                  min_enorm: float, max_enorm_eps: float, backproject: bool=True) -> torch.Tensor:
     """
     Script compiled version of the dist method.
     """
