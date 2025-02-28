@@ -1,11 +1,11 @@
 import pytest
 import torch
 
-from typing import Tuple, Union
-from src.manifolds import Euclidean, Hyperboloid, PoincareBall
+from typing import Tuple, Type
+from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
-def test_addition(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_addition(manifold: Type[Manifold], tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test addition operation."""
     atol, rtol = tolerance
@@ -36,8 +36,8 @@ def test_addition(manifold: Union[Euclidean, Hyperboloid, PoincareBall], toleran
         <= manifold.addition(x.norm(p=2, dim=-1, keepdim=True), y.norm(p=2, dim=-1, keepdim=True))
     )
 
-def test_scalar_mul(seed: None, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
-                    tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
+def test_scalar_mul(seed: None, manifold: Type[Manifold], tolerance: Tuple[float, float],
+                    uniform_points: torch.Tensor) -> None:
     """Test the scalar_mul operation."""
     atol, rtol = tolerance
     identity = torch.ones((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
@@ -129,8 +129,8 @@ def test_scalar_mul(seed: None, manifold: Union[Euclidean, Hyperboloid, Poincare
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
-def test_matvec_mul(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
-                    tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
+def test_matvec_mul(manifold: Type[Manifold], tolerance: Tuple[float, float],
+                    uniform_points: torch.Tensor) -> None:
     """Test the matvec_mul operation."""
     atol, rtol = tolerance
     m1 = torch.randn(uniform_points.shape[-1], 10, dtype=uniform_points.dtype)
@@ -158,13 +158,13 @@ def test_matvec_mul(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
     )
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_hyperplane_forward(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_hyperplane_forward(manifold: Type[Manifold], tolerance: Tuple[float, float],
                             uniform_points: torch.Tensor) -> None:
     """Test the hyperplane_forward operation."""
     atol, rtol = tolerance
     pass
 
-def test_dist(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_dist(manifold: Type[Manifold], tolerance: Tuple[float, float],
               uniform_points: torch.Tensor) -> None:
     """Test the dist and dist_0 operations."""
     atol, rtol = tolerance
@@ -192,8 +192,8 @@ def test_dist(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: 
         rtol=rtol
     )
 
-def test_expmap_retraction_logmap(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
-                                  tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
+def test_expmap_retraction_logmap(manifold: Type[Manifold], tolerance: Tuple[float, float],
+                                  uniform_points: torch.Tensor) -> None:
     """Test the expmap, expmap_0, retraction, logmap and logmap_0 operations."""
     atol, rtol = tolerance
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
@@ -238,7 +238,7 @@ def test_expmap_retraction_logmap(manifold: Union[Euclidean, Hyperboloid, Poinca
         rtol=rtol
     )
 
-def test_ptransp(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_ptransp(manifold: Type[Manifold], tolerance: Tuple[float, float],
                  uniform_points: torch.Tensor) -> None:
     """Test the ptransp and ptransp_0 operations."""
     atol, rtol = tolerance
@@ -279,8 +279,8 @@ def test_ptransp(manifold: Union[Euclidean, Hyperboloid, PoincareBall], toleranc
     )
     assert manifold.is_in_tangent_space(manifold.ptransp(u_pt, uniform_points, origin), origin)
 
-def test_tangent_norm(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
-                      tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
+def test_tangent_norm(manifold: Type[Manifold], tolerance: Tuple[float, float],
+                      uniform_points: torch.Tensor) -> None:
     """Test the tangent_inner and tangent_norm operations."""
     atol, rtol = tolerance
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
@@ -300,8 +300,8 @@ def test_tangent_norm(manifold: Union[Euclidean, Hyperboloid, PoincareBall],
 
 
 # Manifold-specific tests
-def test_gyration(seed: None, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
-                  tolerance: Tuple[float, float], uniform_points: torch.Tensor) -> None:
+def test_gyration(seed: None, manifold: Type[Manifold], tolerance: Tuple[float, float],
+                  uniform_points: torch.Tensor) -> None:
     """Test the gyration operation of the PoincareBall."""
     if isinstance(manifold, (Euclidean, Hyperboloid)):
         pytest.skip()

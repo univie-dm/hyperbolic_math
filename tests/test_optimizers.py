@@ -1,13 +1,13 @@
 import pytest
 import torch
 
-from typing import Tuple, Union
-from src.manifolds import ManifoldParameter, Euclidean, Hyperboloid, PoincareBall
+from typing import Tuple, Type
+from src.manifolds import Manifold, ManifoldParameter
 from src.optim import RiemannianAdam, RiemannianSGD
 
 
 @pytest.mark.parametrize("expmap_update", [True, False])
-def test_riemannian_adam(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_riemannian_adam(manifold: Type[Manifold], tolerance: Tuple[float, float],
                          uniform_points: torch.Tensor, expmap_update: bool) -> None:
     """Test the RiemannianAdam for convergence."""
     atol, _ = tolerance
@@ -27,7 +27,7 @@ def test_riemannian_adam(manifold: Union[Euclidean, Hyperboloid, PoincareBall], 
         assert False, "RiemannianAdam did not converge!"
 
 @pytest.mark.parametrize("expmap_update", [True, False])
-def test_riemannian_sgd(manifold: Union[Euclidean, Hyperboloid, PoincareBall], tolerance: Tuple[float, float],
+def test_riemannian_sgd(manifold: Type[Manifold], tolerance: Tuple[float, float],
                         uniform_points: torch.Tensor, expmap_update: bool) -> None:
     """Test the RiemannianSGD for convergence."""
     atol, rtol = tolerance

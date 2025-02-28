@@ -1,11 +1,11 @@
 import torch
 
-from typing import Union
+from typing import Type
 from .math_utils import arcosh
-from ..manifolds import Euclidean, Hyperboloid, PoincareBall
+from ..manifolds import Manifold
 
 
-def compute_pairwise_distances(points: torch.Tensor, manifold: Union[Euclidean, Hyperboloid, PoincareBall], batch_size: int=1_000) -> torch.Tensor:
+def compute_pairwise_distances(points: torch.Tensor, manifold: Type[Manifold], batch_size: int=1_000) -> torch.Tensor:
     """
     Computes the pairwise distances between points on a given manifold.
 
@@ -13,7 +13,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Union[Euclidean, 
     ----------
     points : torch.Tensor
         Manifold points
-    manifold : Union[Euclidean, Hyperboloid, PoincareBall]
+    manifold : Type[Manifold]
         The manifold on which the points lie
     batch_size : int (optional)
         The batch size for computing distances in chunks (default: 1_000)
@@ -33,7 +33,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Union[Euclidean, 
         indices = indices[:, batch_size:]
     return distmat
 
-def get_delta(points: torch.Tensor, manifold: Union[Euclidean, Hyperboloid, PoincareBall], sample_size=1500, version="average"):
+def get_delta(points: torch.Tensor, manifold: Type[Manifold], sample_size=1500, version="average"):
     """
     Computes the delta hyperbolicity value for a set of points on a given manifold.
 
@@ -41,7 +41,7 @@ def get_delta(points: torch.Tensor, manifold: Union[Euclidean, Hyperboloid, Poin
     ----------
     points : torch.Tensor
         Manifold points
-    manifold : Union[Euclidean, Hyperboloid, PoincareBall]
+    manifold : Type[Manifold]
         The manifold on which the points lie
     sample_size : int (optional)
         The number of points to sample for computing delta (default: 1_500)
