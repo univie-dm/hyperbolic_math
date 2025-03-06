@@ -789,39 +789,6 @@ class PoincareBall(Manifold):
         res = True
         return res
 
-    def geodesic_segment(self, t: torch.Tensor, x: torch.Tensor, y: torch.Tensor, backproject: bool=True) -> torch.Tensor:
-        """
-        Compute the geodesic segment between PoincareBall points x and y parameterized by t.
-        [Only supports a single geodesic segment at a time]
-
-        Parameters
-        ----------
-        t : torch.Tensor
-            Parameter(s) for the geodesic segment, typically in the range [0, 1]
-        x : torch.Tensor
-            Starting PoincareBall point(s)
-        y : torch.Tensor
-            Ending PoincareBall point(s)
-        backproject : bool
-            Whether to project results back to the PoincareBall (default: True)
-
-        Returns
-        -------
-        res : torch.Tensor
-            The geodesic segment between x and y parameterized by t
-
-        References
-        ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
-            Advances in neural information processing systems 31 (2018).
-        """
-        second_term = self.scalar_mul(t, self.addition(-x, y, backproject=backproject), backproject=backproject)
-        res = self.addition(x, second_term, backproject=backproject)
-
-        if backproject:
-            res = self.proj(res)
-        return res
-
 
     ################
     ## Miscalleneous (might be useful) - Geoopt implementation available
