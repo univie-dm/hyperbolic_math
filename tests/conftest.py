@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from typing import Tuple, Union
-from src.manifolds import Euclidean, Hyperboloid, PoincareBall
+from typing import Tuple, Type
+from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
 @pytest.fixture(scope="package", params=[*range(10, 13)])
@@ -31,13 +31,13 @@ def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
 
 #@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
 @pytest.fixture(scope="package", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
-def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Union[Euclidean, Hyperboloid, PoincareBall]:
+def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Type[Manifold]:
     """Test different manifolds and curvatures."""
     c = torch.empty(1, dtype=dtype).exponential_(0.5)
     return request.param(c=c)
 
 @pytest.fixture(scope="package", params=[2, 5, 10, 15])
-def uniform_points(seed: None, dtype: torch.dtype, manifold: Union[Euclidean, Hyperboloid, PoincareBall],
+def uniform_points(seed: None, dtype: torch.dtype, manifold: Type[Manifold],
                    request: pytest.FixtureRequest) -> torch.Tensor:
     """Helper to generate uniformly distributed points for each manifold type."""
     dim = request.param

@@ -789,6 +789,7 @@ class PoincareBall(Manifold):
         res = True
         return res
 
+
     ################
     ## Miscalleneous (might be useful) - Geoopt implementation available
 
@@ -800,7 +801,6 @@ class PoincareBall(Manifold):
 
     # mobius_fn
     # mobius_pointwise_mul
-    # geodesic_unit
 
 
 @torch.jit.script
