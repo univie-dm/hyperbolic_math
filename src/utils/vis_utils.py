@@ -19,7 +19,7 @@ def create_figure(points: torch.Tensor,
                   settings: Dict[str, Union[str, bool]]=None
                   ) -> None:
     """
-    Create and save a 2D visualization of points, geodesics, and hyperplanes in a Poincare Ball.
+    Create and save a 2D visualization of hyperbolic points, geodesics, and hyperplanes in the PoincareBall.
 
     Parameters
     ----------
