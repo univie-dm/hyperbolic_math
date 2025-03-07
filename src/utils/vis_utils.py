@@ -40,7 +40,7 @@ def create_figure(points: torch.Tensor,
         - "dim_red_method": "tangent PCA" {"tangent PCA", "hyperbolic PCA", "tangent tSNE", "hyperbolic tSNE"} (Dimensionality reduction method)
         - "title": "Hyperbolic Embeddings" (Title of the plot)
         - "show_origin": True (Whether to show the origin)
-        - "save_figure": True (Whether to save the figure)
+        - "save_figure": False (Whether to save the figure or return it)
         - "file_name": "hyperbolic_embeddings" (Name of the saved file)
         - "file_path": None (Path to save the file, current directory if None)
         - "file_format": "png" (Format of the saved file)
@@ -49,7 +49,7 @@ def create_figure(points: torch.Tensor,
         "dim_red_method": "tangent PCA",
         "title": "Hyperbolic Embeddings",
         "show_origin": True,
-        "save_figure": True,
+        "save_figure": False,
         "file_name": "hyperbolic_embeddings",
         "file_path": None,
         "file_format": "png",
@@ -61,7 +61,7 @@ def create_figure(points: torch.Tensor,
     settings = default_settings
     assert manifold.is_in_manifold(points), "Points are not in the manifold"
 
-    points = points.cpu().detach()
+    points = points.detach()
     poincare_closure = 1 / manifold.c.sqrt().cpu().detach()
 
     # Cast points to float64 to avoid representational issues
@@ -112,6 +112,8 @@ def create_figure(points: torch.Tensor,
 
     if settings['save_figure']:
         save_figure(fig, settings['file_name'], file_path=settings['file_path'], format=settings['file_format'])
+    else:
+        return fig
 
 
 def pointsTo2d(x: torch.Tensor, manifold: Type[Manifold],
@@ -127,30 +129,31 @@ def pointsTo2d(x: torch.Tensor, manifold: Type[Manifold],
     if settings['dim_red_method'] == 'tangent tSNE':
         # tSNE projected points are all pushed to the boundary
         # TODO: Implement proper tSNE with adjusted hyperbolic distr. (CO-SNE)
-        x = manifold.logmap_0(x)
+        x = manifold.logmap_0(x).cpu()
         x = TSNE(n_components=2, init='random').fit_transform(x)
-        x = manifold.expmap_0(torch.from_numpy(x)).numpy()
+        x = manifold.expmap_0(torch.from_numpy(x).to(manifold.c.device))
     elif settings['dim_red_method'] == 'hyperbolic tSNE':
         # tSNE like this in the hyperbolic space does not make any sense
         # -> Almost all projected points are no longer on the manifold
-        pairwise_dists = compute_pairwise_distances(x, manifold)
+        pairwise_dists = compute_pairwise_distances(x, manifold).cpu()
         x = TSNE(n_components=2, metric='precomputed', init='random').fit_transform(pairwise_dists)
     elif settings['dim_red_method'] == 'tangent PCA':
-        x = manifold.logmap_0(x)
+        x = manifold.logmap_0(x).cpu()
         model = PCA(n_components=2).fit(x[:sample_size])
         x = model.transform(x)
-        x = manifold.expmap_0(torch.from_numpy(x)).numpy()
+        x = manifold.expmap_0(torch.from_numpy(x).to(manifold.c.device))
     elif settings['dim_red_method'] == 'hyperbolic PCA':
-        model = PCA(n_components=2).fit(x[:sample_size])
+        model = PCA(n_components=2).fit(x[:sample_size].cpu())
         x = model.transform(x)
     else:
         raise ValueError(f"Unknown dimensionality reduction method {settings['dim_red_method']}")
 
     if hyperplanes is not None:
-        points = x[:sample_size]
-        hyperplanes = (x[sample_size:sample_size + hyperplane_size], x[sample_size + hyperplane_size:])
+        points = x[:sample_size].cpu().numpy()
+        hyperplanes = (x[sample_size:sample_size + hyperplane_size].cpu().numpy(),
+                       x[sample_size + hyperplane_size:].cpu().numpy())
     else:
-        points = x
+        points = x.cpu().numpy()
 
     return points, hyperplanes
 
