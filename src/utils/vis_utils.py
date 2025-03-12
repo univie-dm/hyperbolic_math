@@ -6,13 +6,13 @@ import numpy.typing as npt
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-from typing import Dict, List, Type, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from .helpers import compute_pairwise_distances
 from ..manifolds import Manifold, Hyperboloid
 
 
 def create_figure(points: torch.Tensor,
-                  manifold: Type[Manifold],
+                  manifold: Manifold,
                   labels: Union[npt.ArrayLike, None]=None,
                   edges: Union[Tuple[List[int], List[int]], None]=None,
                   hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None]=None,
@@ -25,7 +25,7 @@ def create_figure(points: torch.Tensor,
     ----------
     points : torch.Tensor
         Manifold point(s) to be visualized
-    manifold : Type[Manifold]
+    manifold : Manifold
         The manifold type (e.g. Hyperboloid, PoincareBall)
     labels : Union[npt.ArrayLike, None] (optional)
         Labels for the manifold point(s) (default: None)
@@ -116,7 +116,7 @@ def create_figure(points: torch.Tensor,
         return fig
 
 
-def pointsTo2d(x: torch.Tensor, manifold: Type[Manifold],
+def pointsTo2d(x: torch.Tensor, manifold: Manifold,
                hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None],
                settings: dict) -> Tuple[npt.ArrayLike, Union[npt.ArrayLike, None]]:
     """Project points and hyperplanes to 2d using the specified method."""
@@ -179,7 +179,7 @@ def plot_2d_points(x: npt.ArrayLike, ax: plt.Axes, labels: Union[npt.ArrayLike, 
 
 
 def plot_edges(points: npt.ArrayLike, edges: Tuple[List[int], List[int]],
-               manifold: Type[Manifold], ax: plt.Axes, handles: List[plt.Line2D]) -> None:
+               manifold: Manifold, ax: plt.Axes, handles: List[plt.Line2D]) -> None:
     """Plot geodesic segment(s) connecting x and y."""
     assert len(edges[0]) == len(edges[0]), "Start and end points must have the same shape"
 
@@ -200,7 +200,7 @@ def plot_edges(points: npt.ArrayLike, edges: Tuple[List[int], List[int]],
     handles.append(plt.Line2D([0], [0], color='blue', label='Geodesic'))
 
 
-def plot_hyperplane(hyperplanes: Tuple[npt.ArrayLike, npt.ArrayLike], manifold: Type[Manifold],
+def plot_hyperplane(hyperplanes: Tuple[npt.ArrayLike, npt.ArrayLike], manifold: Manifold,
                     ax: plt.Axes, handles: List[plt.Line2D]) -> None:
     """Plot hyperplane(s) and their base point(s)."""
     hyperplane_normals, hyperplane_base_points = hyperplanes

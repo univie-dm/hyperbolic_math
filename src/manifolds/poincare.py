@@ -202,7 +202,7 @@ class PoincareBall(Manifold):
         return res
 
     def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor,
-                           signed: bool = False, scaled: bool = False, backproject: bool=True) -> torch.Tensor:
+                           signed: bool = False, scaled: bool = False) -> torch.Tensor:
         """
         #TODO
         """
@@ -218,12 +218,9 @@ class PoincareBall(Manifold):
         res = arsinh(num / denom) / sqrt_c
         if scaled:
             res = res * m_norm
-
-        if backproject:
-            res = self.proj(res)
         return res
 
-    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
         """
         #TODO
         """
@@ -240,12 +237,9 @@ class PoincareBall(Manifold):
         denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
         dist2hyp = arsinh(self._lambda(sub, self.c) * sqrt_c * msub.abs() / denom) / sqrt_c
         res = orientation * dist2hyp * m_norm
-
-        if backproject:
-            res = self.proj(res)
         return res
 
-    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
         """
         #TODO
         """

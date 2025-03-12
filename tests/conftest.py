@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from typing import Tuple, Type
+from typing import Tuple
 from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
@@ -31,13 +31,13 @@ def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
 
 #@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
 @pytest.fixture(scope="package", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
-def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Type[Manifold]:
+def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Manifold:
     """Test different manifolds and curvatures."""
     c = torch.empty(1, dtype=dtype).exponential_(0.5)
     return request.param(c=c)
 
 @pytest.fixture(scope="package", params=[2, 5, 10, 15])
-def uniform_points(seed: None, dtype: torch.dtype, manifold: Type[Manifold],
+def uniform_points(seed: None, dtype: torch.dtype, manifold: Manifold,
                    request: pytest.FixtureRequest) -> torch.Tensor:
     """Helper to generate uniformly distributed points for each manifold type."""
     dim = request.param

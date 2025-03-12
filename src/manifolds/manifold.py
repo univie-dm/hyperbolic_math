@@ -2,8 +2,6 @@
 
 import torch
 
-from typing import Type
-
 
 class Manifold(torch.nn.Module):
     """Abstract manifold class."""
@@ -101,10 +99,10 @@ class Manifold(torch.nn.Module):
 class ManifoldParameter(torch.nn.Parameter):
     """Subclass of torch.nn.Parameter for Riemannian optimization."""
 
-    def __new__(cls, data: torch.Tensor, requires_grad: bool, manifold: Type[Manifold]):
+    def __new__(cls, data: torch.Tensor, requires_grad: bool, manifold: Manifold):
         return torch.nn.Parameter.__new__(cls, data, requires_grad)
 
-    def __init__(self, data: torch.Tensor, requires_grad: bool, manifold: Type[Manifold]):
+    def __init__(self, data: torch.Tensor, requires_grad: bool, manifold: Manifold):
         self.manifold = manifold
 
     def __repr__(self) -> str:

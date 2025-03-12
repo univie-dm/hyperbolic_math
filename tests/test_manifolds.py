@@ -1,11 +1,11 @@
 import pytest
 import torch
 
-from typing import Tuple, Type
+from typing import Tuple
 from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
-def test_addition(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_addition(manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test addition operation."""
     atol, rtol = tolerance
@@ -36,7 +36,7 @@ def test_addition(manifold: Type[Manifold], tolerance: Tuple[float, float],
         <= manifold.addition(x.norm(p=2, dim=-1, keepdim=True), y.norm(p=2, dim=-1, keepdim=True))
     )
 
-def test_scalar_mul(seed: None, manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, float],
                     uniform_points: torch.Tensor) -> None:
     """Test the scalar_mul operation."""
     atol, rtol = tolerance
@@ -129,7 +129,7 @@ def test_scalar_mul(seed: None, manifold: Type[Manifold], tolerance: Tuple[float
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
-def test_matvec_mul(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_matvec_mul(manifold: Manifold, tolerance: Tuple[float, float],
                     uniform_points: torch.Tensor) -> None:
     """Test the matvec_mul operation."""
     atol, rtol = tolerance
@@ -158,13 +158,13 @@ def test_matvec_mul(manifold: Type[Manifold], tolerance: Tuple[float, float],
     )
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_hyperplane_forward(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_hyperplane_forward(manifold: Manifold, tolerance: Tuple[float, float],
                             uniform_points: torch.Tensor) -> None:
     """Test the hyperplane_forward operation."""
     atol, rtol = tolerance
     pass
 
-def test_dist(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
               uniform_points: torch.Tensor) -> None:
     """Test the dist and dist_0 operations."""
     atol, rtol = tolerance
@@ -192,7 +192,7 @@ def test_dist(manifold: Type[Manifold], tolerance: Tuple[float, float],
         rtol=rtol
     )
 
-def test_expmap_retraction_logmap(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_expmap_retraction_logmap(manifold: Manifold, tolerance: Tuple[float, float],
                                   uniform_points: torch.Tensor) -> None:
     """Test the expmap, expmap_0, retraction, logmap and logmap_0 operations."""
     atol, rtol = tolerance
@@ -238,7 +238,7 @@ def test_expmap_retraction_logmap(manifold: Type[Manifold], tolerance: Tuple[flo
         rtol=rtol
     )
 
-def test_ptransp(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_ptransp(manifold: Manifold, tolerance: Tuple[float, float],
                  uniform_points: torch.Tensor) -> None:
     """Test the ptransp and ptransp_0 operations."""
     atol, rtol = tolerance
@@ -279,7 +279,7 @@ def test_ptransp(manifold: Type[Manifold], tolerance: Tuple[float, float],
     )
     assert manifold.is_in_tangent_space(manifold.ptransp(u_pt, uniform_points, origin), origin)
 
-def test_tangent_norm(manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
                       uniform_points: torch.Tensor) -> None:
     """Test the tangent_inner and tangent_norm operations."""
     atol, rtol = tolerance
@@ -300,7 +300,7 @@ def test_tangent_norm(manifold: Type[Manifold], tolerance: Tuple[float, float],
 
 
 # Manifold-specific tests
-def test_gyration(seed: None, manifold: Type[Manifold], tolerance: Tuple[float, float],
+def test_gyration(seed: None, manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test the gyration operation of the PoincareBall."""
     if isinstance(manifold, (Euclidean, Hyperboloid)):
