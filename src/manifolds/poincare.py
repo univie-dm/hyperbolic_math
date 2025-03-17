@@ -4,7 +4,7 @@ import torch
 import traceback
 
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, artanh, tanh, arsinh
+from ..utils.math_utils import arcosh, artanh, tanh, arsinh, cosh, sinh
 
 
 class PoincareBall(Manifold):
@@ -202,13 +202,13 @@ class PoincareBall(Manifold):
         return res
 
     def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor,
-                           signed: bool = False, scaled: bool = False) -> torch.Tensor:
+                           signed: bool = False, scaled: bool = False, backproject: bool=True) -> torch.Tensor:
         """
-        #TODO
+        Hyperplane forward as described in Ganea's HNN paper.
         """
         sqrt_c = self.c.sqrt()
         m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
-        sub = self.addition(-p, x)
+        sub = self.addition(-p, x, backproject=backproject)
         msub = sub @ m
         if not signed:
             msub = msub.abs()
@@ -220,47 +220,77 @@ class PoincareBall(Manifold):
             res = res * m_norm
         return res
 
-    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor,
+                                   p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         """
-        #TODO
+        Hyperplane forward as described in Ganea's HNN paper but corrected for tangent inners/norms.
         """
+        sqrt_c = self.c.sqrt()
         # Perform matrix-vector multiplication in the tangent space
         # The row vectors of m are the hyperplane normals
-        sub = self.addition(-p, x)
+        sub = self.addition(-p, x, backproject=backproject)
         msub = sub @ m
         # Determine which side of the hyperplanes the point(s) on
         orientation = torch.sign(msub)
         # Get the lengths of the hyperplane normals
-        m_norm = self.tangent_norm(m.T, p, self.c).T
+        m_norm = self.tangent_norm(m.T, p).T
         # Compute the geodesic distance(s) of the point(s) to the hyperplane
-        sqrt_c = self.c.sqrt()
+        num = self._lambda(sub) * sqrt_c * msub.abs()
         denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
-        dist2hyp = arsinh(self._lambda(sub, self.c) * sqrt_c * msub.abs() / denom) / sqrt_c
+        dist2hyp = arsinh(num / denom) / sqrt_c
         res = orientation * dist2hyp * m_norm
         return res
 
-    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor,
+                              r: torch.Tensor) -> torch.Tensor:
         """
-        #TODO
+        Hyperplane forward as described in the HNN++ paper.
         """
-        # z_norm = z.norm(dim=-2, keepdim=True, p=2)
-        # z_unit = z / z_norm.clamp_min(1e-15)
+        sqrt_c = self.c.sqrt()
+        sqrt_2cr = 2 * sqrt_c * r
+        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        mx = x @ m
+        arg = self._lambda(x) * sqrt_c * mx * cosh(sqrt_2cr) - (self._lambda(x)-1) * sinh(sqrt_2cr)
+        res = 2 * m_norm * arsinh(arg) / sqrt_c
+        return res
 
-        # x2 = x.pow(2).sum(dim=-1, keepdim=True)
+    def fully_linear_pp(self, x: torch.Tensor, m: torch.Tensor,
+                        r: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+        """
+        Hyperplane FC as described in the HNN++ paper.
+        """
+        sqrt_c = self.c.sqrt()
+        v = self.hyperplane_forward_pp(x, m, r)
+        w = sinh(sqrt_c * v) / sqrt_c
+        w2 = w.pow(2).sum(dim=-1, keepdim=True)
+        
+        denom = 1 + (1 + self.c * w2).sqrt()
+        res = w / denom
 
-        # distance = (
-        #     arsin_k(
-        #         2 / (1 + k * p.pow(2).sum(dim=-2, keepdim=True)).clamp_min(1e-15) * (
-        #             torch.matmul(x, z_unit)
-        #             - (1 + 2 * k * torch.matmul(x, p) - k * x2)
-        #             / (1 + k * x2).clamp_min(1e-15)
-        #                 * (p * z_unit).sum(dim=-2, keepdim=True)
-        #         ),
-        #         k
-        #         )
-        # )
-        #return 2 * distance * z_norm
-        raise NotImplementedError
+        if backproject:
+            res = self.proj(res)
+        return res
+
+    def hyperplane_forward_pp_ours(self, x: torch.Tensor, m: torch.Tensor,
+                              p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+        sqrt_c = self.c.sqrt()
+        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        sub = self.addition(-p, x, backproject=backproject)
+        msub = sub @ m
+
+        # Determine which side of the hyperplanes the point(s) on
+        orientation = torch.sign(msub)
+        # Compute the geodesic distance(s) of the point(s) to the hyperplane
+        # Hyperbolic law of cosines & sines
+        dist_h = self.dist(-p, x)
+        cosh_cx = cosh(sqrt_c * self.dist_0(x))
+        cosh_cp = cosh(sqrt_c * self.dist_0(p))
+        cosh_ch = cosh(sqrt_c * dist_h)
+        sin_beta = (cosh_cp * cosh_ch - cosh_cx) / (cosh_cp * cosh_ch)
+        dist2hyp = arsinh(sin_beta * sinh(sqrt_c * dist_h)) / sqrt_c
+        
+        res = orientation * dist2hyp * m_norm
+        return res
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius", backproject: bool=True) -> torch.Tensor:
         """
