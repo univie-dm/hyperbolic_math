@@ -11,7 +11,6 @@ ForwardPassType = Literal[
     "hyperplane_forward_pp",
     "fully_linear_pp",
     "hyperplane_forward_pp_ours",
-    "hnn_pp_forward",
     "matvec_mul"
 ]
 
@@ -50,12 +49,14 @@ class Embedding(torch.nn.Module):
         weight = torch.randn(input_dim, output_dim, dtype=self.dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        if forward_method == "matvec_mul" or isinstance(self.manifold, Euclidean):
+        if forward_method in ["matvec_mul", "hyperplane_forward_pp", "fully_linear_pp", "hyperplane_forward_pp_ours"] or isinstance(self.manifold, Euclidean):
             bias = torch.zeros(output_dim, dtype=self.dtype)
-        else: # PoincareBall 'hyperplane_forward' & 'hnn_pp' methods #####TODO
+        else: # PoincareBall 'hyperplane_forward' & 'hyperplane_forward_correct'
             bias = torch.zeros(input_dim, dtype=self.dtype)
-        self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
-        ## TODO: HNNpp has a euclidean bias
+        if forward_method in ["hyperplane_forward_pp", "fully_linear_pp", "hyperplane_forward_pp_ours"]:
+            self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
+        else: # 'hyperplane_forward', 'hyperplane_forward_correct'
+            self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
 
     def _sanity_checks(self, forward_method: ForwardPassType) -> None:
         """Sanity checks to ensure correct initialization and forward method"""
@@ -99,7 +100,7 @@ class Embedding(torch.nn.Module):
             2) ....
         [Only works for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x)
+        x = self.manifold.expmap_0(x, backproject=self.backproject)
         res = self.manifold.hyperplane_forward_pp(x, self.weight, self.bias)
         return res
 
@@ -111,7 +112,7 @@ class Embedding(torch.nn.Module):
             2) ....
         [Only works for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x)
+        x = self.manifold.expmap_0(x, backproject=self.backproject)
         res = self.manifold.fully_linear_pp(x, self.weight, self.bias, backproject=self.backproject)
         return res
 
@@ -123,8 +124,8 @@ class Embedding(torch.nn.Module):
             2) ....
         [Only works for the PoincareBall]
         """
-        bias = self.bias.T @ self.weight
-        bias = self.manifold.expmap_0(bias)
+        bias = self.weight @ self.bias
+        bias = self.manifold.expmap_0(bias, backproject=self.backproject)
         assert self.manifold.is_in_manifold(bias)
 
         res = self.manifold.hyperplane_forward_pp_ours(x, self.weight, bias, backproject=self.backproject)

@@ -263,7 +263,6 @@ class PoincareBall(Manifold):
         v = self.hyperplane_forward_pp(x, m, r)
         w = sinh(sqrt_c * v) / sqrt_c
         w2 = w.pow(2).sum(dim=-1, keepdim=True)
-        
         denom = 1 + (1 + self.c * w2).sqrt()
         res = w / denom
 
@@ -272,7 +271,7 @@ class PoincareBall(Manifold):
         return res
 
     def hyperplane_forward_pp_ours(self, x: torch.Tensor, m: torch.Tensor,
-                              p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+                                   p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         sqrt_c = self.c.sqrt()
         m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
         sub = self.addition(-p, x, backproject=backproject)
@@ -286,9 +285,11 @@ class PoincareBall(Manifold):
         cosh_cx = cosh(sqrt_c * self.dist_0(x))
         cosh_cp = cosh(sqrt_c * self.dist_0(p))
         cosh_ch = cosh(sqrt_c * dist_h)
-        sin_beta = (cosh_cp * cosh_ch - cosh_cx) / (cosh_cp * cosh_ch)
+        sinh_cp = sinh(sqrt_c * self.dist_0(p))
+        sinh_ch = sinh(sqrt_c * dist_h)
+        sin_beta = (cosh_cp * cosh_ch - cosh_cx) / (sinh_cp * sinh_ch)
         dist2hyp = arsinh(sin_beta * sinh(sqrt_c * dist_h)) / sqrt_c
-        
+
         res = orientation * dist2hyp * m_norm
         return res
 
