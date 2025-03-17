@@ -9,8 +9,10 @@ ForwardPassType = Literal[
     "hyperplane_forward",
     "hyperplane_forward_correct",
     "hyperplane_forward_pp",
-    "matvec_mul",
-    "hnn_matvec_mul"
+    "fully_linear_pp",
+    "hyperplane_forward_pp_ours",
+    "hnn_pp_forward",
+    "matvec_mul"
 ]
 
 
@@ -18,50 +20,48 @@ class Embedding(torch.nn.Module):
     """
     Embedding layer that supports different manifolds.
     """
-    manifold: Manifold
-    weight: ManifoldParameter
-    bias: ManifoldParameter
-    forward_method: ForwardPassType
-
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
         manifold: Manifold,
+        dtype: torch.dtype = torch.float64,
         requires_grad: bool = True,
         forward_method: ForwardPassType = None,
+        backproject: bool = True
     ):
         super().__init__()
         self.manifold = manifold
-        if ForwardPassType:
-            self._sanity_checks(forward_method)
-            # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
-            self.forward_method = getattr(self, f"forward_{forward_method}")
-        # Defaults
-        elif isinstance(self.manifold, Euclidean):
+        self.dtype = dtype
+        self.backproject = backproject
+
+        if isinstance(self.manifold, Euclidean):
+            print("Euclidean embedding layer: Forward pass is defaulted to 'matvec_mul' & 'addition'", flush=True)
             self.forward_method = getattr(self, "forward_matvec_mul")
+        elif ForwardPassType:
+            self._sanity_checks(forward_method)
+            self.forward_method = getattr(self, f"forward_{forward_method}")
         elif isinstance(self.manifold, Hyperboloid):
             assert False, "Not implemented yet"
-        else:  # PoincareBall
+        else:   # PoincareBall with unspecified forward method specified
+            print("PoincareBall embedding layer: Forward pass is defaulted to 'hyperplane_forward'", flush=True)
             self.forward_method = getattr(self, "forward_hyperplane_forward")
 
-        weight = torch.randn(input_dim, output_dim)
+        weight = torch.randn(input_dim, output_dim, dtype=self.dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        if forward_method in {"matvec_mul", "hnn_matvec_mul"} or isinstance(self.manifold, Euclidean):
-            bias = torch.zeros(output_dim)
-        else: # PoincareBall hyperplane forward methods
-            bias = torch.zeros(input_dim)
+        if forward_method == "matvec_mul" or isinstance(self.manifold, Euclidean):
+            bias = torch.zeros(output_dim, dtype=self.dtype)
+        else: # PoincareBall 'hyperplane_forward' & 'hnn_pp' methods #####TODO
+            bias = torch.zeros(input_dim, dtype=self.dtype)
         self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
+        ## TODO: HNNpp has a euclidean bias
 
     def _sanity_checks(self, forward_method: ForwardPassType) -> None:
         """Sanity checks to ensure correct initialization and forward method"""
         assert forward_method in get_args(ForwardPassType), f"Invalid forward method: {forward_method}"
-
-        if forward_method == "hyperplane_forward_correct":
+        if forward_method in ["hyperplane_forward_correct", "hyperplane_forward_pp"]:
             assert isinstance(self.manifold, PoincareBall), "custom hyperplane_forward methods only work for PoincareBall manifolds"
-        elif forward_method == "hyperplane_forward_pp":
-            assert False, "Not implemented yet"
 
     def forward_hyperplane_forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -72,8 +72,8 @@ class Embedding(torch.nn.Module):
         """
         assert self.manifold.is_in_manifold(self.bias)
 
-        x = self.manifold.expmap_0(x)
-        res = self.manifold.hyperplane_forward(x, self.weight, self.bias, signed=True, scaled=True)
+        x = self.manifold.expmap_0(x, backproject=self.backproject)
+        res = self.manifold.hyperplane_forward(x, self.weight, self.bias, signed=True, scaled=True, backproject=self.backproject)
         return res
 
     def forward_hyperplane_forward_correct(self, x: torch.Tensor) -> torch.Tensor:
@@ -87,11 +87,11 @@ class Embedding(torch.nn.Module):
         assert self.manifold.is_in_manifold(self.bias)
 
         tangent_space_weight = self.manifold.ptransp_0(self.weight, self.bias)
-        x = self.manifold.expmap_0(x)
-        res = self.manifold.hyperplane_forward_correct(x, tangent_space_weight, self.bias)
+        x = self.manifold.expmap_0(x, backproject=self.backproject)
+        res = self.manifold.hyperplane_forward_correct(x, tangent_space_weight, self.bias, backproject=self.backproject)
         return res
 
-    def forward_dist2hyperplane_pp(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_hyperplane_forward_pp(self, x: torch.Tensor) -> torch.Tensor:
         """
         #TODO
         Forward pass via hyperplane_forward_pp:
@@ -99,39 +99,55 @@ class Embedding(torch.nn.Module):
             2) ....
         [Only works for the PoincareBall]
         """
-        assert False, "Not implemented yet"
-
-        assert self.manifold.is_in_manifold(self.bias)
-
         x = self.manifold.expmap_0(x)
         res = self.manifold.hyperplane_forward_pp(x, self.weight, self.bias)
         return res
 
-    def forward_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_fully_linear_pp(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass via tangent space matrix-vector mult.:
-           1) Perform Matrix-Vector multiplication in the tangent space and map back to the manifold.
-           2) Add the manifold bias to the previous result.
+        #TODO
+        Forward pass via fully_linear_pp:
+            1) ....
+            2) ....
+        [Only works for the PoincareBall]
         """
-        assert self.manifold.is_in_manifold(self.bias)
-
-        x = self.manifold.expmap_0(x @ self.weight)
-        res = self.manifold.addition(x, self.bias)
+        x = self.manifold.expmap_0(x)
+        res = self.manifold.fully_linear_pp(x, self.weight, self.bias, backproject=self.backproject)
         return res
 
-    def forward_hnn_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_hyperplane_forward_pp_ours(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass as in hyperbolic neural networks paper:
-           1) Perform Matrix-Vector multiplication in the tangent space and map back to the manifold.
-           2) Add the manifold bias to the previous result via parallel transport.
-           3) Map the result back to the manifold.
+        #TODO
+        Forward pass via hyperplane_forward_pp_ours:
+            1) ....
+            2) ....
+        [Only works for the PoincareBall]
+        """
+        bias = self.bias.T @ self.weight
+        bias = self.manifold.expmap_0(bias)
+        assert self.manifold.is_in_manifold(bias)
+
+        res = self.manifold.hyperplane_forward_pp_ours(x, self.weight, bias, backproject=self.backproject)
+        return res
+
+    def forward_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass via tangent space Matrix-Vector multiplication.
+            1) Perform Matrix-Vector multiplication in the tangent space.
+            2) Map the result onto the manifold.
+            3) Add the manifold bias to the result.
         """
         assert self.manifold.is_in_manifold(self.bias)
 
-        x = self.manifold.expmap_0(x @ self.weight)
-        bias = self.manifold.ptransp_0(self.manifold.logmap_0(self.bias), x)
-        res = self.manifold.expmap(bias, x)
+        x = self.manifold.expmap_0(x @ self.weight, backproject=self.backproject)
+        res = self.manifold.addition(x, self.bias, backproject=self.backproject)
         return res
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Perform the forward pass with the specified method 'self.forward_method'
+        with precision specified by 'self.dtype'.
+        """
+        if x.dtype != self.dtype:
+            x = x.to(self.dtype)
         return self.forward_method(x)
