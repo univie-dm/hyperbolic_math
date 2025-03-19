@@ -53,6 +53,7 @@ class Embedding(torch.nn.Module):
             bias = torch.zeros(output_dim, dtype=self.dtype)
         else: # PoincareBall 'hyperplane_forward' & 'hyperplane_forward_correct'
             bias = torch.zeros(input_dim, dtype=self.dtype)
+
         if forward_method in ["hyperplane_forward_pp", "fully_linear_pp", "hyperplane_forward_pp_ours"]:
             self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
         else: # 'hyperplane_forward', 'hyperplane_forward_correct'
@@ -124,11 +125,14 @@ class Embedding(torch.nn.Module):
             2) ....
         [Only works for the PoincareBall]
         """
-        bias = self.weight @ self.bias
-        bias = self.manifold.expmap_0(bias, backproject=self.backproject)
-        assert self.manifold.is_in_manifold(bias)
+        # Multiply with factor 2 to the get the tangent norm at the origin
+        w_norm = 2 * self.weight.norm(p=2, dim=0)
+        bias = self.weight * (self.bias / w_norm)
+        bias_manifold = self.manifold.expmap_0(bias.T, backproject=self.backproject)
+        assert self.manifold.is_in_manifold(bias_manifold)
 
-        res = self.manifold.hyperplane_forward_pp_ours(x, self.weight, bias, backproject=self.backproject)
+        x = self.manifold.expmap_0(x, backproject=self.backproject)
+        res = self.manifold.hyperplane_forward_pp_ours(x, self.weight.T, bias_manifold, backproject=self.backproject)
         return res
 
     def forward_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:

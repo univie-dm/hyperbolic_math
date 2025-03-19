@@ -249,6 +249,7 @@ class PoincareBall(Manifold):
         sqrt_c = self.c.sqrt()
         sqrt_2cr = 2 * sqrt_c * r
         m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        #m_norm = self.tangent_norm(m.T, m @ r).T # if added the convergence breaks
         mx = x @ m
         arg = self._lambda(x) * sqrt_c * mx * cosh(sqrt_2cr) - (self._lambda(x)-1) * sinh(sqrt_2cr)
         res = 2 * m_norm * arsinh(arg) / sqrt_c
@@ -273,22 +274,53 @@ class PoincareBall(Manifold):
     def hyperplane_forward_pp_ours(self, x: torch.Tensor, m: torch.Tensor,
                                    p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
         sqrt_c = self.c.sqrt()
-        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
+        x = x.unsqueeze(1)
+        p = p.unsqueeze(0)
+        # Determine on which side of the hyperplanes the point(s) are
         sub = self.addition(-p, x, backproject=backproject)
-        msub = sub @ m
-
-        # Determine which side of the hyperplanes the point(s) on
+        msub = (sub * m.unsqueeze(0)).sum(dim=-1)
         orientation = torch.sign(msub)
+        # Get the lengths of the hyperplane normals
+        m_norm = self.tangent_norm(m, p.squeeze(0)).T
         # Compute the geodesic distance(s) of the point(s) to the hyperplane
-        # Hyperbolic law of cosines & sines
-        dist_h = self.dist(-p, x)
-        cosh_cx = cosh(sqrt_c * self.dist_0(x))
-        cosh_cp = cosh(sqrt_c * self.dist_0(p))
-        cosh_ch = cosh(sqrt_c * dist_h)
-        sinh_cp = sinh(sqrt_c * self.dist_0(p))
-        sinh_ch = sinh(sqrt_c * dist_h)
-        sin_beta = (cosh_cp * cosh_ch - cosh_cx) / (sinh_cp * sinh_ch)
-        dist2hyp = arsinh(sin_beta * sinh(sqrt_c * dist_h)) / sqrt_c
+        xp = (x * p).sum(dim=-1)
+        xp_norm_prod = (x.norm(p=2, dim=-1) * p.norm(p=2, dim=-1)).clamp(min=1e-16)
+        cos_alpha = xp / xp_norm_prod
+        ## Hyperbolic law of cosines & sines
+        dist_x = self.dist_0(x.squeeze(1))
+        dist_p = self.dist_0(p.squeeze(0)).T
+        dist_px = self.dist(-p, x).squeeze(-1)
+
+        # Test 1: Law of sines
+        sin_alpha = (1 - cos_alpha ** 2).clamp(min=0).sqrt()
+        sinh_cx = sinh(sqrt_c * dist_x)
+        sinh_cp = sinh(sqrt_c * dist_p)
+        sinh_cpx = sinh(sqrt_c * dist_px)
+        sin_beta = (sin_alpha * sinh_cx) / sinh_cpx
+        beta1 = torch.asin(sin_beta)
+
+        # Test 2: Law of cosines
+        cosh_cx = cosh(sqrt_c * dist_x)
+        cosh_cp = cosh(sqrt_c * dist_p)
+        cosh_cpx = cosh(sqrt_c * dist_px)
+        cos_beta = (cosh_cp * cosh_cpx - cosh_cx) / (sinh_cp * sinh_cpx)
+        beta2 = torch.acos(cos_beta)
+
+        # Test 3: Inner product
+        psub = (p * sub).sum(dim=-1)
+        psub_norm_prod = (p.norm(p=2, dim=-1) * sub.norm(p=2, dim=-1)).clamp(min=1e-16)
+        cos_beta = psub / psub_norm_prod
+        beta3 = torch.acos(cos_beta)
+
+        #print(f"beta1-beta2: {abs(beta1-beta2).max()}")
+        #print(f"beta1-beta3: {abs(beta1-beta3).max()}")
+        #print(f"beta2-beta3: {abs(beta2-beta3).max()}")
+
+        # Shortest dist. to hyperplane
+        dist2hyp = arsinh(sin_beta * sinh_cpx) / sqrt_c
+        res = orientation * dist2hyp * m_norm
+        ## Dist. of x from p
+        dist2hyp = arcosh(cosh_cx * cosh_cp - sinh_cx * sinh_cp * cos_alpha) / sqrt_c
 
         res = orientation * dist2hyp * m_norm
         return res
