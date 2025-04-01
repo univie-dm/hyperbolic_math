@@ -153,7 +153,8 @@ class PoincareBall(Manifold):
         res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
         if not torch.all(torch.isfinite(res)):
             logging.debug("scalar_mul: ZeroDivisionError")
-            logging.debug(traceback.print_stack(limit=-1))
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
             # Stable case
             x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
             c_norm_prod = self.c.sqrt() * x_norm
@@ -366,7 +367,8 @@ class PoincareBall(Manifold):
         second_term = tanh(c_norm_prod * self._lambda(x) / 2) / c_norm_prod * v
         if not torch.all(torch.isfinite(second_term)):
             logging.debug("expmap: ZeroDivisionError")
-            logging.debug(traceback.print_stack(limit=-1))
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
             # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
@@ -423,7 +425,8 @@ class PoincareBall(Manifold):
         res = tanh(c_norm_prod) / c_norm_prod * v
         if not torch.all(torch.isfinite(res)):
             logging.debug("expmap_0: ZeroDivisionError")
-            logging.debug(traceback.print_stack(limit=-1))
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
             # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
@@ -505,7 +508,8 @@ class PoincareBall(Manifold):
         res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x)) * sub
         if not torch.all(torch.isfinite(res)):
             logging.debug("logmap: ZeroDivisionError")
-            logging.debug(traceback.print_stack(limit=-1))
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
             # sub_norm = sub.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
@@ -550,7 +554,8 @@ class PoincareBall(Manifold):
         res = artanh(c_norm_prod) / c_norm_prod * y
         if not torch.all(torch.isfinite(res)):
             logging.debug("logmap_0: ZeroDivisionError")
-            logging.debug(traceback.print_stack(limit=-1))
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
             # y_norm = y.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
