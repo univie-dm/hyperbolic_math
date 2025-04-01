@@ -1,20 +1,11 @@
 """This file contains global fixtures that are used across all our tests."""
 
-import logging
 import pytest
 import torch
 
 from typing import Tuple
 from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
-@pytest.fixture(scope="session", autouse=True)
-def configure_logging():
-    """Configure logging for the test suite."""
-    # Set up basic configuration
-    logging.basicConfig(
-        level=logging.DEBUG,  # Set the desired level for tests
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
 
 @pytest.fixture(scope="package", params=[*range(10, 13)])
 def seed(request: pytest.FixtureRequest) -> None:
