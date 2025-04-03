@@ -141,7 +141,7 @@ class Euclidean(Manifold):
         res = abs(res)
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Euclidean manifold points x and y.
 
@@ -153,6 +153,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         dim : int
             Dimension along which to compute the distance (default: -1)
+        backproject : bool
+            Whether to project results back to the Euclidean manifold (default: True)
+        Note: The backproject is not used in the Euclidean manifold, but it is included for consistency with other manifolds.
 
         Returns
         -------
