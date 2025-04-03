@@ -129,6 +129,7 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
+@pytest.mark.skip(reason="matvec_mul was removed for now")
 def test_matvec_mul(manifold: Manifold, tolerance: Tuple[float, float],
                     uniform_points: torch.Tensor) -> None:
     """Test the matvec_mul operation."""
@@ -180,7 +181,7 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     )
     # Symmetry
     # TODO: Symmetry does not hold for the the Mobius version
-    #torch.testing.assert_close(manifold.dist(x, y), manifold.dist(y, x), atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold.dist(x, y), manifold.dist(y, x), atol=atol, rtol=rtol)
 
     # Triangle inequality
     assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z))

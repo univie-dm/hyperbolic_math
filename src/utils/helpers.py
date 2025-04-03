@@ -1,6 +1,5 @@
 import torch
 
-from .math_utils import arcosh
 from ..manifolds import Manifold
 
 
@@ -26,7 +25,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
     distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=points.dtype).to(device)
     indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
     while indices.shape[1] > 0:
-        dist_batch = manifold.dist(points[indices[0,:batch_size], :], points[indices[1,:batch_size], :]).reshape(-1)
+        dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]]).reshape(-1)
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
         distmat[indices[1,:batch_size], indices[0,:batch_size]] = dist_batch
         indices = indices[:, batch_size:]

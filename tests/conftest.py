@@ -34,7 +34,7 @@ def tolerance(dtype: torch.dtype) -> Tuple[float, float]:
 def manifold(seed: None, dtype: torch.dtype, request: pytest.FixtureRequest) -> Manifold:
     """Test different manifolds and curvatures."""
     c = torch.empty(1, dtype=dtype).exponential_(0.5)
-    return request.param(c=c)
+    return request.param(c=c, dtype=dtype)
 
 @pytest.fixture(scope="package", params=[2, 5, 10, 15])
 def uniform_points(seed: None, dtype: torch.dtype, manifold: Manifold,
@@ -42,7 +42,6 @@ def uniform_points(seed: None, dtype: torch.dtype, manifold: Manifold,
     """Helper to generate uniformly distributed points for each manifold type."""
     dim = request.param
     num_pts = 2_500 * 6
-    
     if isinstance(manifold, Euclidean):
         bound = 100
         points = torch.empty((num_pts, dim), dtype=dtype).uniform_(-bound, bound)

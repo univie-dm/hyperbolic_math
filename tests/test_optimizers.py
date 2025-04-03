@@ -10,16 +10,16 @@ from src.optim import RiemannianAdam, RiemannianSGD
 def test_riemannian_adam(manifold: Manifold, tolerance: Tuple[float, float],
                          uniform_points: torch.Tensor, expmap_update: bool) -> None:
     """Test the RiemannianAdam for convergence."""
-    atol, _ = tolerance
+    _, rtol = tolerance
     target = uniform_points[0, :]
-    start = manifold.scalar_mul(0.9, target)
+    start = manifold.scalar_mul(torch.tensor([0.9]), target)
     start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update)
+    optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update, backproject=True)
     for _ in range(300_000):
         optim.zero_grad()
-        loss = manifold.dist(start, target).pow(2).mean()
-        if (start-target).norm(p=2) < atol:
+        loss = manifold.dist(start, target, dim=-1).pow(2).mean()
+        if loss < rtol:
             break
         loss.backward()
         optim.step()
@@ -30,15 +30,18 @@ def test_riemannian_adam(manifold: Manifold, tolerance: Tuple[float, float],
 def test_riemannian_sgd(manifold: Manifold, tolerance: Tuple[float, float],
                         uniform_points: torch.Tensor, expmap_update: bool) -> None:
     """Test the RiemannianSGD for convergence."""
-    atol, rtol = tolerance
+    _, rtol = tolerance
     target = uniform_points[0, :]
-    start = manifold.scalar_mul(0.3, target)
+    start = manifold.scalar_mul(torch.tensor([0.3]), target)
     start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update)
+    optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update, backproject=True)
     for _ in range(1000):
         optim.zero_grad()
-        loss = manifold.dist(start, target).pow(2).mean()
+        loss = manifold.dist(start, target, dim=-1).pow(2).mean()
+        if loss < rtol:
+            break
         loss.backward()
         optim.step()
-    torch.testing.assert_close(start.data, target, atol=atol, rtol=rtol)
+    else:
+        assert False, "RiemannianSGD did not converge!"
