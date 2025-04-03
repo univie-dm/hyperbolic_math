@@ -1,3 +1,4 @@
+import copy
 import os
 import torch
 import numpy as np
@@ -12,7 +13,7 @@ from ..manifolds import Manifold, Hyperboloid
 
 
 def create_figure(points: torch.Tensor,
-                  manifold: Manifold,
+                  _manifold: Manifold,
                   labels: Union[npt.ArrayLike, None]=None,
                   edges: Union[Tuple[List[int], List[int]], None]=None,
                   hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None]=None,
@@ -25,7 +26,7 @@ def create_figure(points: torch.Tensor,
     ----------
     points : torch.Tensor
         Manifold point(s) to be visualized
-    manifold : Manifold
+    manifold_ : Manifold
         The manifold type (e.g. Hyperboloid, PoincareBall)
     labels : Union[npt.ArrayLike, None] (optional)
         Labels for the manifold point(s) (default: None)
@@ -37,6 +38,7 @@ def create_figure(points: torch.Tensor,
     settings : Dict[str, Union[str, bool]] (optional)
         Dictionary of settings for the visualization.
         If not provided, the following default settings are used:
+        - "plot_manifold_dtype": torch.float64 (Data type for plotting)
         - "dim_red_method": "tangent PCA" {"tangent PCA", "hyperbolic PCA", "tangent tSNE", "hyperbolic tSNE"} (Dimensionality reduction method)
         - "title": "Hyperbolic Embeddings" (Title of the plot)
         - "show_origin": True (Whether to show the origin)
@@ -46,6 +48,7 @@ def create_figure(points: torch.Tensor,
         - "file_format": "png" (Format of the saved file)
     """
     default_settings = {
+        "plot_manifold_dtype": torch.float64,
         "dim_red_method": "tangent PCA",
         "title": "Hyperbolic Embeddings",
         "show_origin": True,
@@ -61,11 +64,13 @@ def create_figure(points: torch.Tensor,
     settings = default_settings
     assert manifold.is_in_manifold(points), "Points are not in the manifold"
 
+    # Cast points to "plot_manifold_dtype" (double precision avoid representational instabilities)
+    manifold = copy.deepcopy(_manifold)
+    manifold.dtype = settings['plot_manifold_dtype']
+    manifold.c = manifold.c.to(manifold.dtype)
+
     points = points.detach()
     poincare_closure = 1 / manifold.c.sqrt().cpu().detach()
-
-    # Cast points to float64 to avoid representational issues
-    points = points.to(torch.float64)
 
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.set_aspect('equal')
