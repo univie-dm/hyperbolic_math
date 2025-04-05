@@ -79,7 +79,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -197,7 +197,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -222,9 +222,9 @@ class PoincareBall(Manifold):
         return res
 
     def dist2hyperplane(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
-                        dim: int=-1, backproject: bool=True) -> torch.Tensor:
+                        backproject: bool=True) -> torch.Tensor:
         """
-        Computes the geodesic distance(s) of point(s) x to the hyperplane(s) given by a and p.
+        Computes the geodesic distance(s) of point(s) x to the hyperplane(s) defined by a and p.
         [Geoopt implementation]
 
         Parameters
@@ -234,18 +234,20 @@ class PoincareBall(Manifold):
         a : torch.Tensor (out_dim, in_dim)
             Hyperplane tangent normal(s) in the tangent space at p
         p : torch.Tensor (out_dim, in_dim)
-            Hyperplane translation(s)
+            Hyperplane PoincareBall translation(s)
         backproject : bool
             Whether to project self.addition() results back to the PoincareBall (default: True)
 
         Returns
         -------
         res : torch.Tensor (B, out_dim)
-            The clipped product(s) of m and x defined as expmap_0(m * logmap_0(x))
+            The scaled signed geodesic distance(s) of x to the hyperplane(s) defined by a and p.
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+            arXiv (2020).
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
         """
         ### GEOOPT (k = -self.c, signed=True, scaled=True) ###
@@ -271,36 +273,55 @@ class PoincareBall(Manifold):
         res = signed_distance * a_norm # (B, 1, out_dim, 1)
         return res
 
-    def FC_forward(self, x: torch.Tensor, m: torch.Tensor, b: torch.Tensor,
-                     backproject: bool=True) -> torch.Tensor:
-        pass
-
-    def MLR_forward(self, x: torch.Tensor, m: torch.Tensor, b: torch.Tensor,
-                    version="MLR_forward", backproject: bool=True) -> torch.Tensor:
-        pass
-
     def HRL_forward(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
                     version="HRL_forward", backproject: bool=True) -> torch.Tensor:
         """
-        Hyperbolic Reinforcement Learning multinomial linear regressions.
-        Versions as implemented in the paper - uses dist2hyperplane from geoopt.
-        x: (B, in_dim)
-        a: (out_dim, in_dim)
-        p: (out_dim, in_dim)
+        Hyperbolic Reinforcement Learning (scaled) multinomial linear regressions score functions.
+        [Paper implementation with dist2hyperplane from geoopt]
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        a : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s)
+        p : torch.Tensor (out_dim, in_dim)
+            Hyperplane PoincareBall translation(s)
+        version : str
+            Version of the forward pass to compute (default: "HRL_forward")
+            ['HRL_forward': scaled multinomial linear regression score function,
+             'HRL_forward_rs': multinomial linear regression with parallel transported a]
+        backproject : bool
+            Whether to project self.addition() results back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The (scaled) multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and p.
+
+        References
+        ----------
+        Edoardo Cetin, Benjamin Chamberlain, Michael Bronstein, and Jonathan J Hunt. "Hyperbolic deep reinforcement learning."
+            arXiv preprint arXiv:2210.01542, 2022
+        Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+            arXiv (2020).
         """
+        x, a, p = self._2manifold_dtype([x, a, p])
         out_dim, in_dim = a.shape # out_dim, in_dim
-        input_batch_dims = x.size()[:-1] # B
+        input_batch_dims = x.size()[:-1] # B if x is of shape (B, in_dim)
         input = x.view(-1, 1, in_dim) # (B, num_spaces=1, dimensions_per_space=in_dim)
         input_p = input.unsqueeze(-3) # (B, 1, num_spaces=1, dim_per_space=in_dim)
         if version == "HRL_forward":
+            # Compute the scaled signed distance to the hyperplane. Scale=Euclidean norm instead of the tangent norm of a
             signed_distance = self.dist2hyperplane(input_p, a, p, backproject=backproject) # (B, 1, out_dim, 1)
             signed_distance = signed_distance #* self.logits_multiplier # logits_multiplier==1
         elif version == "HRL_forward_rs":
-            conformal_factor = 1 - self.c * p.pow(2).sum(dim=-1) # (out_dim,) # not really the conformal factor
-            signed_distance = self.dist2hyperplane(input_p, a*conformal_factor.unsqueeze(-1), p, backproject=backproject) # (B, 1, out_dim, 1)
-            signed_distance = signed_distance * 2 / conformal_factor # (B, 1, out_dim, 1)
+            # Parallel transport a to the tangent space at p and return the signed distance to the hyperplane (no scaling)
+            conformal_factor = 1 - self.c * p.pow(2).sum(dim=-1, keepdim=True) # (out_dim, 1) # not really the conformal factor
+            signed_distance = self.dist2hyperplane(input_p, a*conformal_factor, p, backproject=backproject) # (B, 1, out_dim, 1)
+            signed_distance = signed_distance * 2 / conformal_factor.view(1, 1, out_dim, 1) # (B, 1, out_dim, 1)
         else:
-            raise ValueError(f"Unknown forward pass version: {version}")
+            raise ValueError(f"Unknown HRL forward pass version: {version}")
         signed_distance = signed_distance.sum(-1) # (B, 1, out_dim)
         res = signed_distance.view(*input_batch_dims, out_dim) # (B, num_planes=out_dim)
         return res
@@ -308,130 +329,87 @@ class PoincareBall(Manifold):
     def HNN_MLR(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
                 backproject: bool=True) -> torch.Tensor:
         """
-        Multinomial linear regression as described in Ganea's HNN paper.
-        x: (B, in_dim)
-        a: (out_dim, in_dim)
-        p: (out_dim, in_dim)
+        Hyperbolic Neural Networks multinomial linear regressions score function.
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        a : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s) in the tangent space at p
+        p : torch.Tensor (out_dim, in_dim)
+            Hyperplane PoincareBall translation(s)
+        backproject : bool
+            Whether to project self.addition() results back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and p.
+
+        References
+        ----------
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+            Advances in neural information processing systems 31 (2018).
         """
+        x, a, p = self._2manifold_dtype([x, a, p])
         sqrt_c = self.c.sqrt()
         sub = self.addition(-p.T.unsqueeze(0), x.unsqueeze(-1), dim=1, backproject=backproject) # (B, in_dim, out_dim)
-        suba = (sub * a.T).sum(dim=1) # (B, out_dim)
+        suba = (sub * a.T).sum(dim=1, keepdim=True) # (B, 1, out_dim)
         a_norm = a.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm).T # (1, out_dim)
-        signed_dist2hyp = arsinh(sqrt_c * self._lambda(sub, dim=1).squeeze(1) * suba / a_norm) / sqrt_c # (B, out_dim)
-        res = self._lambda(p).T * a_norm * signed_dist2hyp # (B, out_dim)
-        return res
-
-    def hyperplane_forward_pp(self, x: torch.Tensor, z: torch.Tensor, r: torch.Tensor) -> torch.Tensor:
-        """
-        Hyperplane forward as described in the HNN++ paper.
-        """
-        sqrt_c = self.c.sqrt()
-        sqrt_c2r = 2 * sqrt_c * r.T # (out_dim, 1)
-        z_norm = z.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm) # (out_dim, 1)
-        lambda_x = self._lambda(x) # (B, 1)
-        z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
-        arsinh_arg = lambda_x * sqrt_c * z_unitx * cosh(sqrt_c2r) - (lambda_x-1) * sinh(sqrt_c2r)
-        #arsinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
-        signed_dist2hyp = arsinh(arsinh_arg) / sqrt_c # (B, out_dim)
-        res = 2 * z_norm.T * signed_dist2hyp # (B, out_dim)
+        signed_dist2hyp = arsinh(sqrt_c * self._lambda(sub, dim=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
+        res = self._lambda(p, dim=-1).T * a_norm * signed_dist2hyp.squeeze(1) # (B, out_dim)
         return res
 
     def HNNpp_forward(self, x: torch.Tensor, z: torch.Tensor, r: torch.Tensor,
-                      version="HNNpp_MLR", backproject: bool=True) -> torch.Tensor:
+                      version="HNNpp_FC", backproject: bool=True) -> torch.Tensor:
         """
-        Hyperbolic Neural Networks ++ forward pass & multinomial linear regression.
-        x: (B, in_dim)
-        z: (out_dim, in_dim)
-        r: (output_dim, 1)
+        Hyperbolic Neural Networks ++ fully connected and multinomial linear regressions score function.
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        z : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s) in the tangent space at the origin
+        r : torch.Tensor (out_dim, 1)
+            Hyperplane PoincareBall translation(s) defined by the scalar r and a
+        version : str
+            Version of the forward pass to compute (default: "HNNpp_FC")
+            ['HNNpp_FC': fully connected forward pass,
+             'HNNpp_MLR': multinomial linear regression forward pass]
+        backproject : bool
+            Whether to project the FC result back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The fully connected result or the multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and r.
+
+        References
+        ----------
+        Shimizu Ryohei, Yusuke Mukuta, and Tatsuya Harada. "Hyperbolic neural networks++."
+            arXiv preprint arXiv:2006.08210 (2020).
         """
         sqrt_c = self.c.sqrt()
         sqrt_c2r = 2 * sqrt_c * r.T # (out_dim, 1)
         z_norm = z.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm) # (out_dim, 1)
-        lambda_x = self._lambda(x) # (B, 1)
+        lambda_x = self._lambda(x, dim=-1) # (B, 1)
         z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
         arsinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
         signed_dist2hyp = arsinh(arsinh_arg) / sqrt_c # (B, out_dim)
         v = 2 * z_norm.T * signed_dist2hyp # (B, out_dim)
-        if version == "HNNpp_MLR":
-            res = v
-        elif version == "HNNpp_linear":
+        if version == "HNNpp_FC":
             w = sinh(sqrt_c * v) / sqrt_c # (B, out_dim)
             w2 = w.pow(2).sum(dim=-1, keepdim=True) # (B, 1)
             denom = 1 + (1 + self.c * w2).sqrt() # (B, 1)
             res = w / denom # (B, out_dim)
             if backproject:
-                res = self.proj(res)
+                res = self.proj(res, dim=-1)
+        elif version == "HNNpp_MLR":
+            res = v
         else:
-            raise ValueError(f"Unknown forward pass version: {version}")
-        return res
-
-    def fully_linear_pp(self, x: torch.Tensor, m: torch.Tensor,
-                        r: torch.Tensor, backproject: bool=True) -> torch.Tensor:
-        """
-        Hyperplane FC as described in the HNN++ paper.
-        """
-        sqrt_c = self.c.sqrt()
-        v = self.hyperplane_forward_pp(x, m, r)
-        w = sinh(sqrt_c * v) / sqrt_c
-        w2 = w.pow(2).sum(dim=-1, keepdim=True)
-        denom = 1 + (1 + self.c * w2).sqrt()
-        res = w / denom
-
-        if backproject:
-            res = self.proj(res)
-        return res
-
-    def hyperplane_forward_pp_ours(self, x: torch.Tensor, m: torch.Tensor,
-                                   p: torch.Tensor, backproject: bool=True) -> torch.Tensor:
-        sqrt_c = self.c.sqrt()
-        x = x.unsqueeze(1)
-        p = p.unsqueeze(0)
-        # Determine on which side of the hyperplanes the point(s) are
-        sub = self.addition(-p, x, backproject=backproject)
-        msub = (sub * m.unsqueeze(0)).sum(dim=-1)
-        orientation = torch.sign(msub)
-        # Get the lengths of the hyperplane normals
-        m_norm = self.tangent_norm(m, p.squeeze(0)).T
-        # Compute the geodesic distance(s) of the point(s) to the hyperplane
-        xp = (x * p).sum(dim=-1)
-        xp_norm_prod = (x.norm(p=2, dim=-1) * p.norm(p=2, dim=-1)).clamp(min=1e-16)
-        cos_alpha = xp / xp_norm_prod
-        ## Hyperbolic law of cosines & sines
-        dist_x = self.dist_0(x.squeeze(1))
-        dist_p = self.dist_0(p.squeeze(0)).T
-        dist_px = self.dist(-p, x).squeeze(-1)
-
-        # Test 1: Law of sines
-        sin_alpha = (1 - cos_alpha ** 2).clamp(min=0).sqrt()
-        sinh_cx = sinh(sqrt_c * dist_x)
-        sinh_cp = sinh(sqrt_c * dist_p)
-        sinh_cpx = sinh(sqrt_c * dist_px)
-        sin_beta = (sin_alpha * sinh_cx) / sinh_cpx
-        beta1 = torch.asin(sin_beta)
-
-        # Test 2: Law of cosines
-        cosh_cx = cosh(sqrt_c * dist_x)
-        cosh_cp = cosh(sqrt_c * dist_p)
-        cosh_cpx = cosh(sqrt_c * dist_px)
-        cos_beta = (cosh_cp * cosh_cpx - cosh_cx) / (sinh_cp * sinh_cpx)
-        beta2 = torch.acos(cos_beta)
-
-        # Test 3: Inner product
-        psub = (p * sub).sum(dim=-1)
-        psub_norm_prod = (p.norm(p=2, dim=-1) * sub.norm(p=2, dim=-1)).clamp(min=1e-16)
-        cos_beta = psub / psub_norm_prod
-        beta3 = torch.acos(cos_beta)
-
-        #print(f"beta1-beta2: {abs(beta1-beta2).max()}")
-        #print(f"beta1-beta3: {abs(beta1-beta3).max()}")
-        #print(f"beta2-beta3: {abs(beta2-beta3).max()}")
-
-        # Shortest dist. to hyperplane
-        #dist2hyp = arsinh(sin_beta * sinh_cpx) / sqrt_c
-        ## Dist. of x from p
-        dist2hyp = arcosh(cosh_cx * cosh_cp - sinh_cx * sinh_cp * cos_alpha) / sqrt_c
-
-        res = orientation * dist2hyp * m_norm
+            raise ValueError(f"Unknown HNNpp forward pass version: {version}")
         return res
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1,
@@ -462,7 +440,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -524,7 +502,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -570,7 +548,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -635,7 +613,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -720,7 +698,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -772,7 +750,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -826,7 +804,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -859,7 +837,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -894,7 +872,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -926,7 +904,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability

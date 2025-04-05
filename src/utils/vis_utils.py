@@ -60,15 +60,15 @@ def create_figure(points: torch.Tensor,
 
     if settings is not None:
         default_settings.update(settings)
-
     settings = default_settings
-    assert manifold.is_in_manifold(points), "Points are not in the manifold"
 
-    # Cast points to "plot_manifold_dtype" (double precision avoid representational instabilities)
+    # Create a copy of the manifold with curvature of the same type as 'plot_manifold_dtype'
+    # Default "plot_manifold_dtype" is double precision to avoid representational instabilities
     manifold = copy.deepcopy(_manifold)
     manifold.dtype = settings['plot_manifold_dtype']
     manifold.c = manifold.c.to(manifold.dtype)
 
+    assert manifold.is_in_manifold(points), "Points are not in the manifold"
     points = points.detach()
     poincare_closure = 1 / manifold.c.sqrt().cpu().detach()
 

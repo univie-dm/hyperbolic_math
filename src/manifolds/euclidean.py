@@ -97,7 +97,7 @@ class Euclidean(Manifold):
 
     def FC_forward(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
         """
-        Perform a fully connected forward pass with matrix A and bias p.
+        Perform a fully connected forward pass with matrix a and bias p.
 
         Parameters
         ----------
@@ -105,22 +105,22 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         a : torch.Tensor (out_dim, in_dim)
             (Euclidean) matrix
-        p : torch.Tensor (out_dim, 1)
+        p : torch.Tensor (1, out_dim)
             Euclidean manifold bias
 
         Returns
         -------
         res : torch.Tensor
-            The forward propagated input(s) Ax+b
+            The forward propagated input(s) ax+b.
         """
         x, a, p = self._2manifold_dtype([x, a, p])
-        res = (x * a.T).sum(dim=1) # (B, out_dim)
+        res = (x.unsqueeze(-1) * a.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
+        res = res + p # (B, out_dim)
         return res
 
-    def MLR_forward(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor, dim: int=-1) -> torch.Tensor:
+    def MLR_forward(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
         """
-        #TODO
-        Perform the hyperplane forward pass.
+        Multinomial linear regressions score function.
 
         Parameters
         ----------
@@ -128,17 +128,17 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         a : torch.Tensor (out_dim, in_dim)
             (Euclidean) matrix
-        p : torch.Tensor (out_dim, 1)
+        p : torch.Tensor (1, out_dim)
             Euclidean manifold bias
 
         Returns
         -------
-        res : torch.Tensor
-            The product(s) of m and x
+        res : torch.Tensor (B, out_dim)
+            The multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and p.
         """
         # TODO: I presume this is equivalent to the MLR_forwards of HNN and HNN++
-        res = self.FC_forward(x, a, p)
-        res = abs(res)
+        res = self.FC_forward(x, a, p) # (B, out_dim)
+        res = res / res.norm(p=2, dim=-1, keepdim=True) # (B, out_dim)
         return res
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
