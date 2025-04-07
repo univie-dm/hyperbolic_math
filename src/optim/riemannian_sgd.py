@@ -29,8 +29,10 @@ class RiemannianSGD(torch.optim.Optimizer):
 
     Other Parameters
     ----------------
-    expmap_update : bool = False
-        Update the parameters with exponential map instead of retraction
+    expmap_update : bool
+        Update the parameters with exponential map instead of retraction (default: False)
+    backproject : bool
+        Whether to project results back to the manifold (default: True)
 
     References
     ----------
@@ -47,6 +49,7 @@ class RiemannianSGD(torch.optim.Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
         expmap_update: bool = False,
+        backproject: bool = True
     ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -66,6 +69,7 @@ class RiemannianSGD(torch.optim.Optimizer):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super().__init__(params, defaults)
         self.expmap_update = expmap_update
+        self.backproject = backproject
 
     def step(self) -> None:
         with torch.no_grad():
@@ -97,7 +101,7 @@ class RiemannianSGD(torch.optim.Optimizer):
 
                     # Actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point)
+                    grad = manifold.egrad2rgrad(grad, point, dim=-1)
                     if momentum > 0:
                         momentum_buffer = state["momentum_buffer"]
                         momentum_buffer.mul_(momentum).add_(grad, alpha=1 - dampening)
@@ -105,20 +109,22 @@ class RiemannianSGD(torch.optim.Optimizer):
                             grad = grad.add_(momentum_buffer, alpha=momentum)
                         else:
                             grad = momentum_buffer
-                    
+
                     if isinstance(manifold, Hyperboloid):
                         # Project the gradient direction onto the Tangent space
                         pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * grad, point)
+                        new_point = manifold.expmap(-learning_rate * grad, point, dim=-1, backproject=self.backproject)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * grad, point)
+                        new_point = manifold.retraction(-learning_rate * grad, point, dim=-1, backproject=self.backproject)
 
                     if momentum > 0:
                         # Parallel transport the momentum to the new point
-                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point)
+                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, dim=-1)
+                        new_momentum_buffer = new_momentum_buffer.to(momentum_buffer.dtype)
                         momentum_buffer.copy_(new_momentum_buffer)
                     # Use copy only for user facing point
+                    new_point = new_point.to(point.dtype)
                     point.copy_(new_point)

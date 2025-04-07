@@ -1,5 +1,3 @@
-"""Hyperboloid manifold."""
-
 import torch
 
 from .manifold import Manifold

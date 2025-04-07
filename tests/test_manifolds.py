@@ -129,6 +129,7 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
+@pytest.mark.skip(reason="matvec_mul was removed for now")
 def test_matvec_mul(manifold: Manifold, tolerance: Tuple[float, float],
                     uniform_points: torch.Tensor) -> None:
     """Test the matvec_mul operation."""

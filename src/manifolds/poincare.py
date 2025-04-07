@@ -1,11 +1,10 @@
-"""PoincareBall manifold."""
-
+import logging
 import torch
 import traceback
 
+from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, artanh, tanh, arsinh
-
+from ..utils.math_utils import arcosh, artanh, tanh, arsinh, cosh, sinh
 
 class PoincareBall(Manifold):
     """
@@ -13,15 +12,59 @@ class PoincareBall(Manifold):
     Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
     """
 
-    def __init__(self, c: torch.Tensor=torch.tensor([1.]), trainable_c: bool=False):
+    def __init__(
+        self,
+        c: torch.Tensor=torch.tensor([1.]),
+        trainable_c: bool=False,
+        dtype: str="float32",
+    ):
         super().__init__(c, trainable_c)
         self.name = "PoincareBall"
-        self.min_enorm = 1e-15
-        # Numerical Stable Unittests
-        # Float64: 1e-15 < max_enorm_eps < 1e-07
-        self.max_enorm_eps = 5e-15
 
-    def _lambda(self, x: torch.Tensor) -> torch.Tensor:
+        if dtype == "float16":
+            self.dtype = torch.float16
+            # TODO: Unverified clamps w.r.t unittests
+            self.min_enorm = 1e-15
+            self.max_enorm_eps = 5e-2
+        elif dtype == "float32":
+            self.dtype = torch.float32
+            # TODO: Unverified clamps w.r.t unittests
+            self.min_enorm = 1e-15
+            # HRL: Max-clamp with 4e-3 to reproduce their results (likely not the case anymore)
+            self.max_enorm_eps = 4e-3
+        elif dtype == "float64":
+            self.dtype = torch.float64
+            # Numerical Stable Unittests for 1e-15 < max_enorm_eps < 1e-07
+            self.min_enorm = 1e-15
+            self.max_enorm_eps = 5e-15
+        else:
+            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
+
+        if torch.finfo(c.dtype).eps < torch.finfo(self.dtype).eps:
+            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}."
+                  f"All manifold operations will be performed in precision {c.dtype}!")
+            self.dtype = c.dtype
+
+    def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
+        """
+        Convert the list of tensor(s) xs to the PoincareBall's dtype.
+
+        Parameters
+        ----------
+        xs : List[torch.Tensor]
+            List of tensor(s)
+
+        Returns
+        -------
+        res : List[torch.Tensor]
+            The list of tensor(s) converted to the PoincareBall's dtype
+        """
+        res = []
+        for x in xs:
+            res.append(x.to(self.dtype))
+        return res
+
+    def _lambda(self, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Compute the conformal factor(s) at the PoincareBall point(s) x.
 
@@ -29,6 +72,8 @@ class PoincareBall(Manifold):
         ----------
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the conformal factor (default: -1)
 
         Returns
         -------
@@ -37,19 +82,20 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        x2 = x.pow(2).sum(dim=-1, keepdim=True)
+        x, = self._2manifold_dtype([x])
+        x2 = x.pow(2).sum(dim=dim, keepdim=True)
         denom = (1.0 - self.c * x2).clamp_min(2 * self.c.sqrt() * self.max_enorm_eps - self.c * self.max_enorm_eps ** 2)
         res = 2 / denom
         return res
 
-    def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+    def _gyration(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Compute the gyration gyr[x,y]z of PoincareBall points x, y and z.
         [Operator to restore commutativity and associativity of mobius addition/scalar_mul]
@@ -62,6 +108,8 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         z : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the gyration (default: -1)
 
         Returns
         -------
@@ -76,12 +124,13 @@ class PoincareBall(Manifold):
         ---------
         Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
+        x, y, z = self._2manifold_dtype([x, y, z])
         c2 = self.c**2
-        x2 = x.pow(2).sum(dim=-1, keepdim=True)
-        y2 = y.pow(2).sum(dim=-1, keepdim=True)
-        xy = (x * y).sum(dim=-1, keepdim=True)
-        xz = (x * z).sum(dim=-1, keepdim=True)
-        yz = (y * z).sum(dim=-1, keepdim=True)
+        x2 = x.pow(2).sum(dim=dim, keepdim=True)
+        y2 = y.pow(2).sum(dim=dim, keepdim=True)
+        xy = (x * y).sum(dim=dim, keepdim=True)
+        xz = (x * z).sum(dim=dim, keepdim=True)
+        yz = (y * z).sum(dim=dim, keepdim=True)
         a = -c2 * xz * y2 + self.c * yz + 2 * c2 * xy * yz
         b = -c2 * yz * x2 - self.c * xz
         num = 2 * (a * x + b * y)
@@ -89,7 +138,7 @@ class PoincareBall(Manifold):
         res = z + num / denom
         return res
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def addition(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Add PoincareBall point(s) y to PoincareBall point(s) x using mobius gyrovector addition.
         Non-commutative and non-associative!
@@ -100,6 +149,8 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         y : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the addition (default: -1)
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -116,10 +167,18 @@ class PoincareBall(Manifold):
         ---------
         Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
-        res = addition_compiled(x, y, self.c, self.max_enorm_eps, backproject)
+        x, y = self._2manifold_dtype([x, y])
+        x2 = x.pow(2).sum(dim=dim, keepdim=True)
+        y2 = y.pow(2).sum(dim=dim, keepdim=True)
+        xy = (x * y).sum(dim=dim, keepdim=True)
+        num = (1 + 2 * self.c * xy + self.c * y2) * x + (1 - self.c * x2) * y
+        denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
+        res = num / denom
+        if backproject:
+            res = self.proj(res, dim=dim)
         return res
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Multiply PoincareBall point(s) x with scalar(s) r.
 
@@ -129,6 +188,8 @@ class PoincareBall(Manifold):
             Scalar factor(s)
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the scalar multiplication (default: -1)
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -139,7 +200,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -147,124 +208,217 @@ class PoincareBall(Manifold):
         The PoincareBall multiplication converges towards the tangent space multiplication
         as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
         """
-        x_norm = x.norm(p=2, dim=-1, keepdim=True)
+        r, x = self._2manifold_dtype([r, x])
+        x_norm = x.norm(p=2, dim=dim, keepdim=True)
         c_norm_prod = self.c.sqrt() * x_norm
         res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
         if not torch.all(torch.isfinite(res)):
-            print(f"scalar_mul: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
+            logging.debug("scalar_mul: ZeroDivisionError")
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
             # Stable case
-            x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+            x_norm = x.norm(p=2, dim=dim, keepdim=True).clamp_min(self.min_enorm)
             c_norm_prod = self.c.sqrt() * x_norm
             res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
-
         if backproject:
-            res = self.proj(res)
+            res = self.proj(res, dim=dim)
         return res
 
-    def matvec_mul(self, m: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def dist2hyperplane(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
+                        backproject: bool=True) -> torch.Tensor:
         """
-        Multiply PoincareBall point(s) x with (Euclidean) matrix m from the left.
+        Computes the geodesic distance(s) of point(s) x to the hyperplane(s) defined by a and p.
+        [Geoopt implementation]
 
         Parameters
         ----------
-        m : torch.Tensor
-            (Euclidean) matrix
-        x : torch.Tensor
+        x : torch.Tensor (B, in_dim)
             PoincareBall point(s)
+        a : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s) in the tangent space at p
+        p : torch.Tensor (out_dim, in_dim)
+            Hyperplane PoincareBall translation(s)
         backproject : bool
-            Whether to project results back to the PoincareBall (default: True)
+            Whether to project self.addition() results back to the PoincareBall (default: True)
 
         Returns
         -------
-        res : torch.Tensor
-            The clipped product(s) of m and x defined as expmap_0(m * logmap_0(x))
+        res : torch.Tensor (B, out_dim)
+            The scaled signed geodesic distance(s) of x to the hyperplane(s) defined by a and p.
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+            arXiv (2020).
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
-
-        Stability
-        ---------
-        TODO: We have sigma_min*||x|| <= ||Mx|| <= ||M||*||x|| <= sigma_max*||x||
-        ||x||-> 0 implies that ||Mx|| -> 0 for reasonably bounded M
-        ||Mx|| -> 0 may cause problems if ||x|| is very large. How to deal with this?
         """
+        ### GEOOPT (k = -self.c, signed=True, scaled=True) ###
+        # diff = _mobius_add(-p, x, k, dim=-1)
+        # diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=keepdim).clamp_min(1e-15)
+        # sc_diff_a = (diff * a).sum(dim=-1, keepdim=keepdim)
+        # a_norm = a.norm(dim=-1, keepdim=keepdim, p=2)
+        # num = 2.0 * sc_diff_a
+        # denom =  torch.abs((1 + k * diff_norm2) * a_norm) + 1e-15
+        # distance = arsin_k(num / denom, k)  # geoopt uses arsinh
+        # distance = distance * a_norm
+        # return distance
+        ######################################################
+        x, a, p = self._2manifold_dtype([x, a, p])
         sqrt_c = self.c.sqrt()
-        mx = x @ m
-        x_norm = x.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
-        mx_norm = mx.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
-        res = tanh(artanh(sqrt_c * x_norm) / x_norm * mx_norm ) / (sqrt_c * mx_norm) * mx
-
-        if backproject:
-            res = self.proj(res)
+        diff = self.addition(-p, x, dim=-1, backproject=backproject) # (B, 1, out_dim, in_dim)
+        diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=True).clamp_min(1e-15) # (B, 1, out_dim, 1)
+        sc_diff_a = (diff * a).sum(dim=-1, keepdim=True) # (B, 1, out_dim, 1)
+        a_norm = a.norm(dim=-1, keepdim=True, p=2) # (out_dim, 1)
+        num = 2.0 * sc_diff_a # (B, 1, out_dim, 1)
+        denom = torch.abs((1 - self.c * diff_norm2) * a_norm) + 1e-15 # (B, 1, out_dim, 1)
+        signed_distance = arsinh(sqrt_c * num / denom) / sqrt_c # (B, 1, out_dim, 1)
+        res = signed_distance * a_norm # (B, 1, out_dim, 1)
         return res
 
-    def hyperplane_forward(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor,
-                           signed: bool = False, scaled: bool = False) -> torch.Tensor:
+    def HRL_forward(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
+                    version="HRL_forward", backproject: bool=True) -> torch.Tensor:
         """
-        #TODO
+        Hyperbolic Reinforcement Learning (scaled) multinomial linear regressions score functions.
+        [Paper implementation with dist2hyperplane from geoopt]
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        a : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s)
+        p : torch.Tensor (out_dim, in_dim)
+            Hyperplane PoincareBall translation(s)
+        version : str
+            Version of the forward pass to compute (default: "HRL_forward")
+            ['HRL_forward': scaled multinomial linear regression score function,
+             'HRL_forward_rs': multinomial linear regression with parallel transported a]
+        backproject : bool
+            Whether to project self.addition() results back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The (scaled) multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and p.
+
+        References
+        ----------
+        Edoardo Cetin, Benjamin Chamberlain, Michael Bronstein, and Jonathan J Hunt. "Hyperbolic deep reinforcement learning."
+            arXiv preprint arXiv:2210.01542, 2022
+        Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
+            arXiv (2020).
         """
-        sqrt_c = self.c.sqrt()
-        m_norm = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
-        sub = self.addition(-p, x)
-        msub = sub @ m
-        if not signed:
-            msub = msub.abs()
-        num = 2.0 * sqrt_c * msub
-        sub_norm2 = sub.pow(2).sum(dim=-1, keepdim=True)
-        denom = m_norm * (1 - self.c * sub_norm2).clamp_min(2 * sqrt_c * self.max_enorm_eps - self.c * self.max_enorm_eps ** 2)
-        res = arsinh(num / denom) / sqrt_c
-        if scaled:
-            res = res * m_norm
+        x, a, p = self._2manifold_dtype([x, a, p])
+        out_dim, in_dim = a.shape # out_dim, in_dim
+        input_batch_dims = x.size()[:-1] # B if x is of shape (B, in_dim)
+        input = x.view(-1, 1, in_dim) # (B, num_spaces=1, dimensions_per_space=in_dim)
+        input_p = input.unsqueeze(-3) # (B, 1, num_spaces=1, dim_per_space=in_dim)
+        if version == "HRL_forward":
+            # Compute the scaled signed distance to the hyperplane. Scale=Euclidean norm instead of the tangent norm of a
+            signed_distance = self.dist2hyperplane(input_p, a, p, backproject=backproject) # (B, 1, out_dim, 1)
+            signed_distance = signed_distance #* self.logits_multiplier # logits_multiplier==1
+        elif version == "HRL_forward_rs":
+            # Parallel transport a to the tangent space at p and return the signed distance to the hyperplane (no scaling)
+            conformal_factor = 1 - self.c * p.pow(2).sum(dim=-1, keepdim=True) # (out_dim, 1) # not really the conformal factor
+            signed_distance = self.dist2hyperplane(input_p, a*conformal_factor, p, backproject=backproject) # (B, 1, out_dim, 1)
+            signed_distance = signed_distance * 2 / conformal_factor.view(1, 1, out_dim, 1) # (B, 1, out_dim, 1)
+        else:
+            raise ValueError(f"Unknown HRL forward pass version: {version}")
+        signed_distance = signed_distance.sum(-1) # (B, 1, out_dim)
+        res = signed_distance.view(*input_batch_dims, out_dim) # (B, num_planes=out_dim)
         return res
 
-    def hyperplane_forward_correct(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+    def HNN_MLR(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
+                backproject: bool=True) -> torch.Tensor:
         """
-        #TODO
+        Hyperbolic Neural Networks multinomial linear regressions score function.
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        a : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s) in the tangent space at p
+        p : torch.Tensor (out_dim, in_dim)
+            Hyperplane PoincareBall translation(s)
+        backproject : bool
+            Whether to project self.addition() results back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and p.
+
+        References
+        ----------
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+            Advances in neural information processing systems 31 (2018).
         """
-        # Perform matrix-vector multiplication in the tangent space
-        # The row vectors of m are the hyperplane normals
-        sub = self.addition(-p, x)
-        msub = sub @ m
-        # Determine which side of the hyperplanes the point(s) on
-        orientation = torch.sign(msub)
-        # Get the lengths of the hyperplane normals
-        m_norm = self.tangent_norm(m.T, p, self.c).T
-        # Compute the geodesic distance(s) of the point(s) to the hyperplane
+        x, a, p = self._2manifold_dtype([x, a, p])
         sqrt_c = self.c.sqrt()
-        denom = m.norm(p=2, dim=0, keepdim=True).clamp_min(self.min_enorm)
-        dist2hyp = arsinh(self._lambda(sub, self.c) * sqrt_c * msub.abs() / denom) / sqrt_c
-        res = orientation * dist2hyp * m_norm
+        sub = self.addition(-p.T.unsqueeze(0), x.unsqueeze(-1), dim=1, backproject=backproject) # (B, in_dim, out_dim)
+        suba = (sub * a.T).sum(dim=1, keepdim=True) # (B, 1, out_dim)
+        a_norm = a.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm).T # (1, out_dim)
+        signed_dist2hyp = arsinh(sqrt_c * self._lambda(sub, dim=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
+        res = self._lambda(p, dim=-1).T * a_norm * signed_dist2hyp.squeeze(1) # (B, out_dim)
         return res
 
-    def hyperplane_forward_pp(self, x: torch.Tensor, m: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+    def HNNpp_forward(self, x: torch.Tensor, z: torch.Tensor, r: torch.Tensor,
+                      version="HNNpp_FC", backproject: bool=True) -> torch.Tensor:
         """
-        #TODO
+        Hyperbolic Neural Networks ++ fully connected and multinomial linear regressions score function.
+
+        Parameters
+        ----------
+        x : torch.Tensor (B, in_dim)
+            PoincareBall point(s)
+        z : torch.Tensor (out_dim, in_dim)
+            Hyperplane tangent normal(s) in the tangent space at the origin
+        r : torch.Tensor (out_dim, 1)
+            Hyperplane PoincareBall translation(s) defined by the scalar r and a
+        version : str
+            Version of the forward pass to compute (default: "HNNpp_FC")
+            ['HNNpp_FC': fully connected forward pass,
+             'HNNpp_MLR': multinomial linear regression forward pass]
+        backproject : bool
+            Whether to project the FC result back to the PoincareBall (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (B, out_dim)
+            The fully connected result or the multinomial linear regression score(s) of x with respect to the linear model(s) defined by a and r.
+
+        References
+        ----------
+        Shimizu Ryohei, Yusuke Mukuta, and Tatsuya Harada. "Hyperbolic neural networks++."
+            arXiv preprint arXiv:2006.08210 (2020).
         """
-        # z_norm = z.norm(dim=-2, keepdim=True, p=2)
-        # z_unit = z / z_norm.clamp_min(1e-15)
+        sqrt_c = self.c.sqrt()
+        sqrt_c2r = 2 * sqrt_c * r.T # (out_dim, 1)
+        z_norm = z.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm) # (out_dim, 1)
+        lambda_x = self._lambda(x, dim=-1) # (B, 1)
+        z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
+        arsinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
+        signed_dist2hyp = arsinh(arsinh_arg) / sqrt_c # (B, out_dim)
+        v = 2 * z_norm.T * signed_dist2hyp # (B, out_dim)
+        if version == "HNNpp_FC":
+            w = sinh(sqrt_c * v) / sqrt_c # (B, out_dim)
+            w2 = w.pow(2).sum(dim=-1, keepdim=True) # (B, 1)
+            denom = 1 + (1 + self.c * w2).sqrt() # (B, 1)
+            res = w / denom # (B, out_dim)
+            if backproject:
+                res = self.proj(res, dim=-1)
+        elif version == "HNNpp_MLR":
+            res = v
+        else:
+            raise ValueError(f"Unknown HNNpp forward pass version: {version}")
+        return res
 
-        # x2 = x.pow(2).sum(dim=-1, keepdim=True)
-
-        # distance = (
-        #     arsin_k(
-        #         2 / (1 + k * p.pow(2).sum(dim=-2, keepdim=True)).clamp_min(1e-15) * (
-        #             torch.matmul(x, z_unit)
-        #             - (1 + 2 * k * torch.matmul(x, p) - k * x2)
-        #             / (1 + k * x2).clamp_min(1e-15)
-        #                 * (p * z_unit).sum(dim=-2, keepdim=True)
-        #         ),
-        #         k
-        #         )
-        # )
-        #return 2 * distance * z_norm
-        raise NotImplementedError
-
-    def dist(self, x: torch.Tensor, y: torch.Tensor, version: str="mobius", backproject: bool=True) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, dim: int=-1,
+             version: str="mobius", backproject: bool=True) -> torch.Tensor:
         """
-        Compute the geodesic distance(s) between PoincareBall points x and y.
+        Compute the geodesic distance(s) between PoincareBall point(s) x and y.
 
         Parameters
         ----------
@@ -272,9 +426,13 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         y : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "mobius")
-            ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
+            ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
+             'mobius': Mobius distance,
+             'metric_tensor': Metric-tensor induced distance]
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -285,17 +443,46 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
-        Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
+        'mobius_direct' avoids the asymmetric mobius addition, but casually fails to comply
+            with the tangent norm unit testing since it also uses the mobius addition.
+        'mobius' is faster than 'metric_tensor', but not symmetric.
+        'metric_tensor' is much faster than Mobius-dist, but unstable for boundary points.
         """
-        res = dist_compiled(x, y, self.c, version, self.min_enorm, self.max_enorm_eps, backproject=backproject)
+        x, y = self._2manifold_dtype([x, y])
+        if version == "mobius_direct":
+            # Symmetric Mobius distance that doesn't need self.addition()
+            sqrt_c = self.c.sqrt()
+            x2 = x.pow(2).sum(dim=dim, keepdim=True)
+            y2 = y.pow(2).sum(dim=dim, keepdim=True)
+            xy = (-x * y).sum(dim=dim, keepdim=True)
+            num = (-x + y).pow(2).sum(dim=dim, keepdim=True)
+            denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
+            xysum_norm = (num / denom).sqrt()
+            dist_c = artanh(sqrt_c * xysum_norm)
+            res = 2 * dist_c / sqrt_c
+        elif version == "mobius":
+            # Mobius distance
+            sqrt_c = self.c.sqrt()
+            dist_c = artanh(sqrt_c * self.addition(-x, y, dim=dim, backproject=backproject).norm(p=2, dim=dim, keepdim=True))
+            res = 2 * dist_c / sqrt_c
+        elif version == "metric_tensor":
+            # Metric-tensor induced distance
+            x_sqnorm = x.pow(2).sum(dim=dim, keepdim=True)
+            y_sqnorm = y.pow(2).sum(dim=dim, keepdim=True)
+            xy_diff_sqnorm = (x - y).pow(2).sum(dim=dim, keepdim=True)
+            res = 1 + 2 * self.c * xy_diff_sqnorm / ((1 - self.c * x_sqnorm) * (1 - self.c * y_sqnorm))
+            condition = res < 1 + self.min_enorm
+            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
 
-    def dist_0(self, x: torch.Tensor, version: str="mobius") -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, dim: int=-1, version: str="mobius") -> torch.Tensor:
         """
         Compute the geodesic distance(s) of PoincareBall point(s) x from/to the PoincareBall origin.
 
@@ -303,9 +490,13 @@ class PoincareBall(Manifold):
         ----------
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "mobius")
-            ['mobius': Mobius-dist, 'mobius_symmetric': Symmetrized mobius-dist, metric_tensor: Metric-tensor-induced-dist]
+            ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
+             'mobius': Mobius distance,
+             'metric_tensor': Metric-tensor induced distance]
 
         Returns
         -------
@@ -314,17 +505,30 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
-        Metric-tensor-induced-dist is 75% faster than Mobius-dist, but unstable for boundary points.
+        'metric_tensor' is much faster than Mobius-dist, but unstable for boundary points.
         """
-        res = dist_0_compiled(x, self.c, version, self.min_enorm)
+        x, = self._2manifold_dtype([x])
+        if version in ["mobius_direct", "mobius"]:
+            # (Direct) Mobius distance
+            sqrt_c = self.c.sqrt()
+            dist_c = artanh(sqrt_c * x.norm(p=2, dim=dim, keepdim=True))
+            res = 2 * dist_c / sqrt_c
+        elif version == "metric_tensor":
+            # Metric-tensor induced distance
+            x_sqnorm = x.pow(2).sum(dim=dim, keepdim=True)
+            res = 1 + 2 * self.c * x_sqnorm / (1 - self.c * x_sqnorm)
+            condition = res < 1 + self.min_enorm
+            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
-    
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at PoincareBall point(s) x to the clipped PoincareBall.
         [Exponential map]
@@ -335,6 +539,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the exponential map (default: -1)
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -345,7 +551,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -360,35 +566,36 @@ class PoincareBall(Manifold):
 
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        v_norm = v.norm(p=2, dim=-1, keepdim=True)
+        v, x = self._2manifold_dtype([v, x])
+        v_norm = v.norm(p=2, dim=dim, keepdim=True)
         c_norm_prod = self.c.sqrt() * v_norm
-        second_term = tanh(c_norm_prod * self._lambda(x) / 2) / c_norm_prod * v
+        second_term = tanh(c_norm_prod * self._lambda(x, dim=dim) / 2) / c_norm_prod * v
         if not torch.all(torch.isfinite(second_term)):
-            print(f"expmap: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
+            logging.debug("expmap: ZeroDivisionError")
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
-            # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+            # v_norm = v.norm(p=2, dim=dim, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = self.c.sqrt() * v_norm
-            # second_term = tanh(c_norm_prod * self._lambda(x) / 2) / c_norm_prod * v
+            # second_term = tanh(c_norm_prod * self._lambda(x, dim=dim) / 2) / c_norm_prod * v
 
             # Stable case 2 - cnorm clamping
-            v_norm = v.norm(p=2, dim=-1, keepdim=True)
+            v_norm = v.norm(p=2, dim=dim, keepdim=True)
             c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-            second_term = tanh(c_norm_prod * self._lambda(x) / 2) / c_norm_prod * v
+            second_term = tanh(c_norm_prod * self._lambda(x, dim=dim) / 2) / c_norm_prod * v
 
             # Stable case 3 - denom clamping
-            # v_norm = v.norm(p=2, dim=-1, keepdim=True)
+            # v_norm = v.norm(p=2, dim=dim, keepdim=True)
             # c_norm_prod = self.c.sqrt() * v_norm
-            # second_term = tanh(c_norm_prod * self._lambda(x) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
+            # second_term = tanh(c_norm_prod * self._lambda(x, dim=dim) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
 
-        # Apply backprojection to the second term and the sum (via addition)
         if backproject:
-            second_term = self.proj(second_term)
-        res = self.addition(x, second_term, backproject=backproject)
+            second_term = self.proj(second_term, dim=dim)
+        res = self.addition(x, second_term, dim=dim, backproject=backproject)
         return res
 
-    def expmap_0(self, v: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at the PoincareBall origin to the clipped PoincareBall.
         [Exponential map]
@@ -397,6 +604,8 @@ class PoincareBall(Manifold):
         ----------
         v : torch.Tensor
             Vector(s) in the tangent space of the PoincareBall origin
+        dim : int
+            Dimension along which to compute the exponential map (default: -1)
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -407,7 +616,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -417,28 +626,29 @@ class PoincareBall(Manifold):
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
         since tanh(z) ~ z for small z.
         """
-        v_norm = v.norm(p=2, dim=-1, keepdim=True)
+        v, = self._2manifold_dtype([v])
+        v_norm = v.norm(p=2, dim=dim, keepdim=True)
         c_norm_prod = self.c.sqrt() * v_norm
         res = tanh(c_norm_prod) / c_norm_prod * v
         if not torch.all(torch.isfinite(res)):
-            print(f"expmap_0: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
+            logging.debug("expmap_0: ZeroDivisionError")
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
-            # v_norm = v.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+            # v_norm = v.norm(p=2, dim=dim, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = self.c.sqrt() * v_norm
 
             ## Stable case 2 - cnorm clamping
-            v_norm = v.norm(p=2, dim=-1, keepdim=True)
+            v_norm = v.norm(p=2, dim=dim, keepdim=True)
             c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
 
             res = tanh(c_norm_prod) / c_norm_prod * v
-
         if backproject:
-            res = self.proj(res)
+            res = self.proj(res, dim=dim)
         return res
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor, backproject: bool=True) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, dim: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         First-order approximation of the exponential map for vector(s) v at PoincareBall point(s) x.
         [Retraction map]
@@ -449,6 +659,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the backprojection of the retraction (default: -1)
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -462,12 +674,13 @@ class PoincareBall(Manifold):
         Gary Bécigneul and Octavian Ganea. "Riemannian adaptive optimization methods."
             International Conference on Learning Representations (2019).
         """
+        v, x = self._2manifold_dtype([v, x])
         res = x + v
         if backproject:
-            res = self.proj(res)
+            res = self.proj(res, dim=dim)
         return res
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Map PoincareBall point(s) y to the tangent space(s) of PoincareBall point(s) x.
         [Logarithmic map]
@@ -478,6 +691,8 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the logarithmic map (default: -1)
 
         Returns
         -------
@@ -486,7 +701,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -498,26 +713,28 @@ class PoincareBall(Manifold):
 
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        sub = self.addition(-x, y)
-        sub_norm = sub.norm(p=2, dim=-1, keepdim=True)
+        y, x = self._2manifold_dtype([y, x])
+        sub = self.addition(-x, y, dim=dim)
+        sub_norm = sub.norm(p=2, dim=dim, keepdim=True)
         c_norm_prod = self.c.sqrt() * sub_norm
-        res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x)) * sub
+        res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, dim=dim)) * sub
         if not torch.all(torch.isfinite(res)):
-            print(f"logmap: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
+            logging.debug("logmap: ZeroDivisionError")
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
-            # sub_norm = sub.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+            # sub_norm = sub.norm(p=2, dim=dim, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = self.c.sqrt() * sub_norm
 
             # Stable case 2 - cnorm clamping
-            sub_norm = sub.norm(p=2, dim=-1, keepdim=True)
+            sub_norm = sub.norm(p=2, dim=dim, keepdim=True)
             c_norm_prod = (self.c.sqrt() * sub_norm).clamp_min(self.min_enorm)
 
-            res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x)) * sub
+            res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, dim=dim)) * sub
         return res
 
-    def logmap_0(self, y: torch.Tensor) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Map PoincareBall point(s) y to the tangent space of the PoincareBall origin.
         [Logarithmic map]
@@ -526,6 +743,8 @@ class PoincareBall(Manifold):
         ----------
         y : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the logarithmic map (default: -1)
 
         Returns
         -------
@@ -534,7 +753,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
@@ -544,25 +763,27 @@ class PoincareBall(Manifold):
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
         since artanh(z) ~ z for small z.
         """
-        y_norm = y.norm(p=2, dim=-1, keepdim=True)
+        y, = self._2manifold_dtype([y])
+        y_norm = y.norm(p=2, dim=dim, keepdim=True)
         c_norm_prod = self.c.sqrt() * y_norm
         res = artanh(c_norm_prod) / c_norm_prod * y
         if not torch.all(torch.isfinite(res)):
-            print(f"logmap_0: ZeroDivisionError")
-            traceback.print_stack(limit=-1)
+            logging.debug("logmap_0: ZeroDivisionError")
+            stack_trace = ''.join(traceback.format_stack(limit=-1))
+            logging.debug(stack_trace)
 
             # Stable case 1 - norm clamping
-            # y_norm = y.norm(p=2, dim=-1, keepdim=True).clamp_min(self.min_enorm)
+            # y_norm = y.norm(p=2, dim=dim, keepdim=True).clamp_min(self.min_enorm)
             # c_norm_prod = self.c.sqrt() * y_norm
 
             # Stable case 2 - cnorm clamping
-            y_norm = y.norm(p=2, dim=-1, keepdim=True)
+            y_norm = y.norm(p=2, dim=dim, keepdim=True)
             c_norm_prod = (self.c.sqrt() * y_norm).clamp_min(self.min_enorm)
 
             res = artanh(c_norm_prod) / c_norm_prod * y
         return res
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space(s) of PoincareBall point(s) x
         to the tangent space(s) of PoincareBall point(s) y.
@@ -576,6 +797,8 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         y : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the parallel transport (default: -1)
 
         Returns
         -------
@@ -584,18 +807,19 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        conformal_frac = self._lambda(x) / self._lambda(y)
-        res = conformal_frac * self._gyration(y, -x, v)
+        v, x, y = self._2manifold_dtype([v, x, y])
+        conformal_frac = self._lambda(x, dim=dim) / self._lambda(y, dim=dim)
+        res = conformal_frac * self._gyration(y, -x, v, dim=dim)
         return res
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space of the PoincareBall origin
         to the tangent space(s) of PoincareBall point(s) y.
@@ -606,6 +830,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space of the PoincareBall origin
         y : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the parallel transport (default: -1)
 
         Returns
         -------
@@ -614,18 +840,19 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        conformal_frac = 2 / self._lambda(y)
+        v, y = self._2manifold_dtype([v, y])
+        conformal_frac = 2 / self._lambda(y, dim=dim)
         res = conformal_frac * v
         return res
 
-    def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Compute the inner product(s) between tangent vectors u and v of the tangent space(s) at PoincareBall point(s) x
         with respect to the Riemannian metric of the PoincareBall.
@@ -638,6 +865,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the tangent inner product (default: -1)
 
         Returns
         -------
@@ -646,21 +875,18 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        if v is u:
-            res = u.pow(2)
-        else:
-            res = u * v
-        res = res.sum(dim=-1, keepdim=True) * self._lambda(x) ** 2
+        u, v, x = self._2manifold_dtype([u, v, x])
+        res = (u * v).sum(dim=dim, keepdim=True) * self._lambda(x, dim=dim) ** 2
         return res
 
-    def tangent_norm(self, v: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Compute the norm(s) of tangent vector(s) v of the tangent space(s) at PoincareBall point(s) x
         with respect to the Riemannian metric of the PoincareBall.
@@ -671,6 +897,8 @@ class PoincareBall(Manifold):
             Vector(s) in the tangent space(s) of x
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the tangent norm (default: -1)
 
         Returns
         -------
@@ -679,18 +907,18 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ganea, Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
+        Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
 
         Stability
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        v_norm = v.norm(p=2, dim=-1, keepdim=True)
-        res = self._lambda(x) * v_norm
+        v, x = self._2manifold_dtype([v, x])
+        res = self._lambda(x, dim=dim) * v.norm(p=2, dim=dim, keepdim=True)
         return res
 
-    def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
         Compute the Riemannian gradient(s) at PoincareBall point(s) x from the Euclidean gradient(s).
 
@@ -700,6 +928,8 @@ class PoincareBall(Manifold):
             Euclidean gradient(s)
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to compute the Riemannian gradient (default: -1)
 
         Returns
         -------
@@ -715,17 +945,23 @@ class PoincareBall(Manifold):
         ---------
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
-        res = grad / self._lambda(x) ** 2
+        # Compute the conformal factor in the manifold's precision and cast it to the gradient's precision
+        x, = self._2manifold_dtype([x])
+        conformal_scale = (self._lambda(x, dim=dim) ** 2).to(grad.dtype)
+        res = grad / conformal_scale
         return res
 
-    def proj(self, x: torch.Tensor):
+    def proj(self, x: torch.Tensor, dim: int=-1) -> torch.Tensor:
         """
-        Project point(s) x onto the clipped PoincareBall by restricting the Euclidean norm(s) to 1/c.sqrt()-self.max_enorm_eps.
+        Project point(s) x onto the clipped PoincareBall by restricting
+        the Euclidean norm(s) to 1/c.sqrt()-self.max_enorm_eps.
 
         Parameters
         ----------
         x : torch.Tensor
             Point(s)
+        dim : int
+            Dimension along which to compute the projection (default: -1)
 
         Returns
         -------
@@ -742,10 +978,16 @@ class PoincareBall(Manifold):
         TODO:
         Precision depends on c
         """
-        res = proj_compiled(x, self.c, self.max_enorm_eps)
+        x, sqrt_c_recipr = self._2manifold_dtype([x, 1 / self.c.sqrt()])
+        # Check if max_enorm can be numerically represented for the given c and eps
+        max_enorm = sqrt_c_recipr - self.max_enorm_eps
+        assert max_enorm < sqrt_c_recipr
+        x_norm = x.norm(p=2, dim=dim, keepdim=True)
+        proj_x = (max_enorm / x_norm) * x
+        res = torch.where(x_norm > max_enorm, proj_x, x)
         return res
 
-    def is_in_manifold(self, x: torch.Tensor) -> bool:
+    def is_in_manifold(self, x: torch.Tensor, dim: int=-1) -> bool:
         """
         Check if point(s) x lie in the PoincareBall.
 
@@ -753,18 +995,21 @@ class PoincareBall(Manifold):
         ----------
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to check if x lies in the PoincareBall (default: -1)
 
         Returns
         -------
         res : bool
             True if all points x lie in the PoincareBall, False otherwise
         """
-        x2 = x.pow(2).sum(dim=-1, keepdim=True)
+        x, = self._2manifold_dtype([x])
+        x2 = x.pow(2).sum(dim=dim, keepdim=True)
         r2 = torch.ones_like(x2) / self.c
         res = torch.all(x2 < r2)
         return res
 
-    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor) -> bool:
+    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, dim: int=-1) -> bool:
         """
         Check if vector(s) v belong to the tangent space(s) at PoincareBall point(s) x.
 
@@ -774,6 +1019,9 @@ class PoincareBall(Manifold):
             Vector(s)
         x : torch.Tensor
             PoincareBall point(s)
+        dim : int
+            Dimension along which to check if v belong to the tangent space (default: -1)
+        Note: The dimension is not used in the PoincareBall, but it is included for consistency with other manifolds.
 
         Returns
         -------
@@ -793,90 +1041,3 @@ class PoincareBall(Manifold):
     #     sqnorm = torch.norm(x, p=2, dim=1, keepdim=True) ** 2
     #     return sqrtK * torch.cat([K + sqnorm, 2 * sqrtK * x], dim=1) / (K - sqnorm)
 
-    # mobius_fn
-    # mobius_pointwise_mul
-
-
-@torch.jit.script
-def proj_compiled(x: torch.Tensor, c: torch.Tensor, max_enorm_eps: float) -> torch.Tensor:
-    """
-    Script compiled version of the proj method.
-    """
-    # BUG: Must clamp like them to get their results, can't use enorm here
-    if x.dtype == torch.float32:
-        eps = 4e-3
-    else:
-        eps = max_enorm_eps
-    max_enorm = (1 / c.sqrt()).to(x.dtype) - eps
-    assert max_enorm < (1 / c.sqrt()).to(x.dtype)
-    x_norm = x.norm(p=2, dim=-1, keepdim=True)
-    proj_x = (max_enorm / x_norm) * x
-    condition = x_norm > max_enorm
-    res = torch.where(condition, proj_x, x)
-    return res
-
-@torch.jit.script
-def addition_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor,
-                      max_enorm_eps: float, backproject: bool=True) -> torch.Tensor:
-    """
-    Script compiled version of the addition method.
-    """
-    x2 = x.pow(2).sum(dim=-1, keepdim=True)
-    y2 = y.pow(2).sum(dim=-1, keepdim=True)
-    xy = (x * y).sum(dim=-1, keepdim=True)
-    num = (1 + 2 * c * xy + c * y2) * x + (1 - c * x2) * y
-    denom = 1 + 2 * c * xy + c**2 * x2 * y2
-    res = num / denom
-    if backproject:
-        res = proj_compiled(res, c, max_enorm_eps)
-    return res
-
-@torch.jit.script
-def dist_compiled(x: torch.Tensor, y: torch.Tensor, c: torch.Tensor, version: str,
-                  min_enorm: float, max_enorm_eps: float, backproject: bool=True) -> torch.Tensor:
-    """
-    Script compiled version of the dist method.
-    """
-    if version == "mobius":
-        # Mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
-    elif version == "mobius_symmetric":
-        # TODO check if this is algebraically allowed, numerically OK
-        # Symmetrized mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c_1 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
-        dist_c_2 = artanh(sqrt_c * addition_compiled(-x, y, c, max_enorm_eps, backproject).norm(p=2, dim=-1, keepdim=True))
-        res = (dist_c_1 + dist_c_2) / sqrt_c
-    elif version == "metric_tensor":
-        # Metric-tensor-induced-dist
-        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-        y_sqnorm = y.pow(2).sum(dim=-1, keepdim=True)
-        xy_diff_sqnorm = (x - y).pow(2).sum(dim=-1, keepdim=True)
-        res = 1 + 2 * c * xy_diff_sqnorm / ((1 - c * x_sqnorm) * (1 - c * y_sqnorm))
-        condition = res < 1 + min_enorm
-        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
-    else:
-        raise ValueError(f"Unknown version: {version}")
-    return res
-
-@torch.jit.script
-def dist_0_compiled(x: torch.Tensor, c: torch.Tensor, version: str, min_enorm: float) -> torch.Tensor:
-    """
-    Script compiled version of the dist_0 method.
-    """
-    if version in ["mobius", "mobius_symmetric"]:
-        # Mobius-dist/Symmetrized mobius-dist
-        sqrt_c = c.sqrt()
-        dist_c = artanh(sqrt_c * x.norm(p=2, dim=-1, keepdim=True))
-        res = 2 * dist_c / sqrt_c
-    elif version == "metric_tensor":
-        # Metric-tensor-induced-dist
-        x_sqnorm = x.pow(2).sum(dim=-1, keepdim=True)
-        res = 1 + 2 * c * x_sqnorm / (1 - c * x_sqnorm)
-        condition = res < 1 + min_enorm
-        res = torch.where(condition, torch.zeros_like(res), arcosh(res) / c.sqrt())
-    else:
-        raise ValueError(f"Unknown version: {version}")
-    return res

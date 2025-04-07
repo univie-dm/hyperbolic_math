@@ -5,12 +5,18 @@ from . import Manifold, ManifoldParameter, Euclidean, Hyperboloid, PoincareBall
 
 
 ForwardPassType = Literal[
-    None,
-    "hyperplane_forward",
-    "hyperplane_forward_correct",
-    "hyperplane_forward_pp",
-    "matvec_mul",
-    "hnn_matvec_mul"
+    # Defaults
+    "manifold_FC",
+    "manifold_MLR",
+    # Hyperbolic Reinforcement Learning (HRL)
+    "HRL_forward",
+    "HRL_forward_rs",
+    # Hyperbolic Neural Networks (HNN)
+    "HNN_FC",
+    "HNN_MLR",
+    # Hyperbolic Neural Networks ++ (HNNpp)
+    "HNNpp_FC",
+    "HNNpp_MLR"
 ]
 
 
@@ -18,120 +24,169 @@ class Embedding(torch.nn.Module):
     """
     Embedding layer that supports different manifolds.
     """
-    manifold: Manifold
-    weight: ManifoldParameter
-    bias: ManifoldParameter
-    forward_method: ForwardPassType
-
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
         manifold: Manifold,
-        requires_grad: bool = True,
-        forward_method: ForwardPassType = None,
+        params_dtype: str="float32",
+        requires_grad: bool=True,
+        forward_method: ForwardPassType="manifold_FC",
+        backproject: bool=True
     ):
         super().__init__()
         self.manifold = manifold
-        if ForwardPassType:
-            self._sanity_checks(forward_method)
-            # NOTE: Assumes that method names are of the form "forward_{name}", where name specifies the forward pass method
+        self.backproject = backproject
+        if params_dtype == "float16":
+            self.params_dtype = torch.float16
+        elif params_dtype == "float32":
+            self.params_dtype = torch.float32
+        elif params_dtype == "float64":
+            self.params_dtype = torch.float64
+        else:
+            raise ValueError(f"Unsupported params_dtype: {params_dtype}."
+                              "Supported dtypes are float16, float32, and float64.")
+
+        if isinstance(self.manifold, Euclidean) and forward_method in ["manifold_FC", "manifold_MLR"]:
+            print(f"{self.manifold} embedding layer: Default forward pass '{forward_method}' is used.", flush=True)
             self.forward_method = getattr(self, f"forward_{forward_method}")
-        # Defaults
-        elif isinstance(self.manifold, Euclidean):
-            self.forward_method = getattr(self, "forward_matvec_mul")
         elif isinstance(self.manifold, Hyperboloid):
             assert False, "Not implemented yet"
-        else:  # PoincareBall
-            self.forward_method = getattr(self, "forward_hyperplane_forward")
+        elif isinstance(self.manifold, PoincareBall) and forward_method == "manifold_FC":
+            print(f"{self.manifold} embedding layer: Default forward pass 'HNN_FC' is used.", flush=True)
+            self.forward_method = getattr(self, f"forward_HNN_FC")
+        elif isinstance(self.manifold, PoincareBall) and forward_method == "manifold_MLR":
+            print(f"{self.manifold} embedding layer: Default forward pass 'HNN_MLR' is used.", flush=True)
+            self.forward_method = getattr(self, f"forward_HNN_MLR")
+        # PoincareBall / Unsupported methods
+        elif ForwardPassType:
+            # Sanity check
+            assert forward_method in get_args(ForwardPassType), f"Invalid {self.manifold.name} forward method: {forward_method}"
+            self.forward_method = getattr(self, f"forward_{forward_method}")
 
-        weight = torch.randn(input_dim, output_dim)
+        if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
+            print(f"Warning: Embedding.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
+                  f"All manifold operations will be performed in lower precision {manifold.dtype}!")
+
+        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
-        if forward_method in {"matvec_mul", "hnn_matvec_mul"} or isinstance(self.manifold, Euclidean):
-            bias = torch.zeros(output_dim)
-        else: # PoincareBall hyperplane forward methods
-            bias = torch.zeros(input_dim)
-        self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
+        if forward_method in ["manifold_FC", "manifold_MLR"]:
+            bias = torch.zeros((1, output_dim), dtype=self.params_dtype)
+            self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
+        # PoincareBall exclusive forward methods
+        elif forward_method in ["HRL_forward", "HRL_forward_rs"]:
+            bias = torch.zeros((output_dim, input_dim), dtype=self.params_dtype)
+            self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
+        elif forward_method == "HNN_FC":
+            bias = torch.zeros((1, output_dim), dtype=self.params_dtype)
+            self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
+        elif forward_method == "HNN_MLR":
+            bias = torch.zeros((output_dim, input_dim), dtype=self.params_dtype)
+            self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
+        elif forward_method in ["HNNpp_FC", "HNNpp_MLR"]:
+            # Bias is aligned and reduced to a scalar multiple of the tangent normal
+            bias = torch.zeros((output_dim, 1), dtype=self.params_dtype)
+            self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
 
-    def _sanity_checks(self, forward_method: ForwardPassType) -> None:
-        """Sanity checks to ensure correct initialization and forward method"""
-        assert forward_method in get_args(ForwardPassType), f"Invalid forward method: {forward_method}"
-
-        if forward_method == "hyperplane_forward_correct":
-            assert isinstance(self.manifold, PoincareBall), "custom hyperplane_forward methods only work for PoincareBall manifolds"
-        elif forward_method == "hyperplane_forward_pp":
-            assert False, "Not implemented yet"
-
-    def forward_hyperplane_forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_manifold_FC(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass via hyperplane_forward:
-            1) Map x to the manifold.
-            2) Perform the hyperplane forward pass.
-        [Only works for the PoincareBall]
+        Compute the Euclidean fully connected forward pass based on self.weights and self.bias (standard linear layer).
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (1, out_dim), res: (B, out_dim)
         """
-        assert self.manifold.is_in_manifold(self.bias)
-
-        x = self.manifold.expmap_0(x)
-        res = self.manifold.hyperplane_forward(x, self.weight, self.bias, signed=True, scaled=True)
+        res = self.manifold.FC_forward(x, self.weight, self.bias)
         return res
 
-    def forward_hyperplane_forward_correct(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_manifold_MLR(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass via hyperplane_forward_correct:
-            1) Parallel transport the weight to the tangent space of the bias.
-            2) Map x to the manifold.
-            3) Perform the corrected hyperplane forward pass.
-        [Only works for the PoincareBall]
+        Compute the Euclidean multinomial linear regressions score(s)
+        based on the linear model(s) defined by self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (1, out_dim), res: (B, out_dim)
         """
-        assert self.manifold.is_in_manifold(self.bias)
-
-        tangent_space_weight = self.manifold.ptransp_0(self.weight, self.bias)
-        x = self.manifold.expmap_0(x)
-        res = self.manifold.hyperplane_forward_correct(x, tangent_space_weight, self.bias)
+        res = self.manifold.MLR_forward(x, self.weight, self.bias)
         return res
 
-    def forward_dist2hyperplane_pp(self, x: torch.Tensor) -> torch.Tensor:
+    # Hyperbolic Reinforcement Learning (HRL) [Only defined for the PoincareBall]
+    def forward_HRL_forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        #TODO
-        Forward pass via hyperplane_forward_pp:
-            1) ....
-            2) ....
-        [Only works for the PoincareBall]
+        Compute the 'Hyperbolic Reinforcement Learning' multinomial linear regressions score(s)
+        based on the linear model(s) defined by self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
+        [Only defined for the PoincareBall]
         """
-        assert False, "Not implemented yet"
-
-        assert self.manifold.is_in_manifold(self.bias)
-
-        x = self.manifold.expmap_0(x)
-        res = self.manifold.hyperplane_forward_pp(x, self.weight, self.bias)
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+         # HRL expands the weights to support multiple spaces at once
+        # We don't use this. Instead we feed x of shape (B, on_dim)
+        res = self.manifold.HRL_forward(x, self.weight, self.bias, version="HRL_forward", backproject=self.backproject)
         return res
 
-    def forward_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_HRL_forward_rs(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass via tangent space matrix-vector mult.:
-           1) Perform Matrix-Vector multiplication in the tangent space and map back to the manifold.
-           2) Add the manifold bias to the previous result.
+        Compute the 'Hyperbolic Reinforcement Learning' scaled multinomial linear regressions score(s)
+        based on the linear model(s) defined by self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
+        [Only defined for the PoincareBall]
         """
-        assert self.manifold.is_in_manifold(self.bias)
-
-        x = self.manifold.expmap_0(x @ self.weight)
-        res = self.manifold.addition(x, self.bias)
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        # HRL expands the weights to support multiple spaces at once
+        # We don't use this. Instead we feed x of shape (B, on_dim)
+        res = self.manifold.HRL_forward(x, self.weight, self.bias, version="HRL_forward_rs", backproject=self.backproject)
         return res
 
-    def forward_hnn_matvec_mul(self, x: torch.Tensor) -> torch.Tensor:
+    # Hyperbolic Neural Networks (HNN) [Only defined for the PoincareBall]
+    def forward_HNN_FC(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass as in hyperbolic neural networks paper:
-           1) Perform Matrix-Vector multiplication in the tangent space and map back to the manifold.
-           2) Add the manifold bias to the previous result via parallel transport.
-           3) Map the result back to the manifold.
+        Compute the 'Hyperbolic Neural Networks' fully connected forward pass based on self.weights and self.bias.
+            1) Perform matrix vector multiplication in the tangent space at the origin.
+            2) Map the result to the manifold.
+            3) Add the manifold bias to the result.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (1, out_dim), res: (B, out_dim)
+        [Only defined for the PoincareBall]
         """
-        assert self.manifold.is_in_manifold(self.bias)
+        assert self.manifold.is_in_manifold(self.bias, dim=-1)
+        x = (x.unsqueeze(-1) * self.weight.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject) # (B, out_dim)
+        res = self.manifold.addition(x, self.bias, dim=-1, backproject=self.backproject) # (B, out_dim)
+        return res
 
-        x = self.manifold.expmap_0(x @ self.weight)
-        bias = self.manifold.ptransp_0(self.manifold.logmap_0(self.bias), x)
-        res = self.manifold.expmap(bias, x)
+    def forward_HNN_MLR(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the 'Hyperbolic Neural Networks' multinomial linear regressions score(s)
+        based on the linear model(s) defined by self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
+        [Only defined for the PoincareBall]
+        """
+        assert self.manifold.is_in_manifold(self.bias, dim=-1)
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        # Map self.weights from the tangent space at the origin to the tangent space at self.bias
+        pt_weight = self.manifold.ptransp_0(self.weight, self.bias, dim=-1) # (out_dim, in_dim)
+        res = self.manifold.HNN_MLR(x, pt_weight, self.bias, backproject=self.backproject)
+        return res
+
+    # Hyperbolic Neural Networks ++ (HNNpp) [Only defined for the PoincareBall]
+    def forward_HNNpp_FC(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the 'Hyperbolic Neural Networks ++' fully connected forward pass based on self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, 1), res: (B, out_dim)
+        [Only defined for the PoincareBall]
+        """
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        res = self.manifold.HNNpp_forward(x, self.weight, self.bias, version="HNNpp_FC", backproject=self.backproject)
+        return res
+
+    def forward_HNNpp_MLR(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the 'Hyperbolic Neural Networks ++' multinomial linear regressions score(s)
+        based on the linear model(s) defined by self.weights and self.bias.
+        Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, 1), res: (B, out_dim)
+        [Only defined for the PoincareBall]
+        """
+        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        res = self.manifold.HNNpp_forward(x, self.weight, self.bias, version="HNNpp_MLR", backproject=self.backproject)
         return res
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Perform the forward pass with the specified method 'self.forward_method'.
+        """
         return self.forward_method(x)

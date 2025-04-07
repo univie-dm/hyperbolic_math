@@ -27,7 +27,7 @@ where = ["src"]
 include = ["hyperbolic_test*", "manifolds*", "utils*"]
 
 [tool.pytest.ini_options]
-addopts = "-ra -q"
+addopts = "-ra -q --log-cli-level=DEBUG"
 testpaths = ["tests"]
 pythonpath = "src"
 

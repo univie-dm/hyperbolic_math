@@ -27,18 +27,18 @@ class RiemannianAdam(torch.optim.Adam):
         Weight decay (L2 penalty) (default: 0)
     amsgrad : bool (optional)
         Whether to use the AMSGrad variant of this algorithm
-        from the paper `On the Convergence of Adam and Beyond`_
-        (default: False)
+        from the paper `On the Convergence of Adam and Beyond`_ (default: False)
 
     Other Parameters
     ----------------
-    expmap_update : bool = False
-        Update the parameters with exponential map instead of retraction
-
+    expmap_update : bool
+        Update the parameters with exponential map instead of retraction (default: False)
+    backproject : bool
+        Whether to project results back to the manifold (default: True)
 
     .. _On the Convergence of Adam and Beyond:
         https://openreview.net/forum?id=ryQu7f-RZ
-    
+
     References
     ----------
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
@@ -54,6 +54,7 @@ class RiemannianAdam(torch.optim.Adam):
         weight_decay: float = 0,
         amsgrad: bool = False,
         expmap_update: bool = False,
+        backproject: bool = True
     ):
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -75,6 +76,7 @@ class RiemannianAdam(torch.optim.Adam):
         )
         super().__init__(params, **defaults)
         self.expmap_update = expmap_update
+        self.backproject = backproject
 
     def step(self) -> None:
         with torch.no_grad():
@@ -113,14 +115,15 @@ class RiemannianAdam(torch.optim.Adam):
                     exp_avg_sq = state["exp_avg_sq"]
                     # Actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point)
+                    grad = manifold.egrad2rgrad(grad, point, dim=-1)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
 
                     if param_is_hyperbolic:
                         # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
-                        exp_avg_sq_new = manifold.tangent_inner(u=grad, v=grad, x=point)
+                        exp_avg_sq_new = manifold.tangent_inner(grad, grad, point, dim=-1)
+                        exp_avg_sq_new = exp_avg_sq_new.to(grad.dtype)
                     else:
-                        # Euclidean parameter: Compute grad^2 parameter-wise
+                        # Euclidean parameter: Compute grad^2 component-wise
                         exp_avg_sq_new = grad.pow(2)
 
                     exp_avg_sq.mul_(betas[1]).add_(exp_avg_sq_new, alpha=1 - betas[1])
@@ -136,18 +139,20 @@ class RiemannianAdam(torch.optim.Adam):
                         denom = exp_avg_sq.div(bias_correction2).sqrt_()
                     # Get the direction for ascend
                     direction = exp_avg.div(bias_correction1) / denom.add_(eps)
-                    
+
                     if isinstance(manifold, Hyperboloid):
                         # Project the gradient direction onto the Tangent space
                         pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * direction, point)
+                        new_point = manifold.expmap(-learning_rate * direction, point, dim=-1, backproject=self.backproject)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * direction, point)
+                        new_point = manifold.retraction(-learning_rate * direction, point, dim=-1, backproject=self.backproject)
                     # Parallel transport the exponential averaging to the new point
-                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point)
+                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, dim=-1)
                     # Use copy only for user facing point
+                    new_point = new_point.to(point.dtype)
+                    exp_avg_new = exp_avg_new.to(exp_avg.dtype)
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)
