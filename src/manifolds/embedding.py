@@ -29,14 +29,23 @@ class Embedding(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         manifold: Manifold,
-        params_dtype: torch.dtype=torch.float32,
+        params_dtype: str="float32",
         requires_grad: bool=True,
-        forward_method: ForwardPassType='manifold_FC',
+        forward_method: ForwardPassType="manifold_FC",
         backproject: bool=True
     ):
         super().__init__()
         self.manifold = manifold
         self.backproject = backproject
+        if params_dtype == "float16":
+            self.params_dtype = torch.float16
+        elif params_dtype == "float32":
+            self.params_dtype = torch.float32
+        elif params_dtype == "float64":
+            self.params_dtype = torch.float64
+        else:
+            raise ValueError(f"Unsupported params_dtype: {params_dtype}."
+                              "Supported dtypes are float16, float32, and float64.")
 
         if isinstance(self.manifold, Euclidean) and forward_method in ["manifold_FC", "manifold_MLR"]:
             print(f"{self.manifold} embedding layer: Default forward pass '{forward_method}' is used.", flush=True)
@@ -55,29 +64,29 @@ class Embedding(torch.nn.Module):
             assert forward_method in get_args(ForwardPassType), f"Invalid {self.manifold.name} forward method: {forward_method}"
             self.forward_method = getattr(self, f"forward_{forward_method}")
 
-        if torch.finfo(params_dtype).eps < torch.finfo(manifold.dtype).eps:
-            print(f"Warning: params_dtype is {params_dtype}, but manifold.dtype is {manifold.dtype}."
+        if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
+            print(f"Warning: Embedding.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
                   f"All manifold operations will be performed in lower precision {manifold.dtype}!")
 
-        weight = torch.randn((output_dim, input_dim), dtype=params_dtype)
+        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
 
         if forward_method in ["manifold_FC", "manifold_MLR"]:
-            bias = torch.zeros((1, output_dim), dtype=params_dtype)
+            bias = torch.zeros((1, output_dim), dtype=self.params_dtype)
             self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
         # PoincareBall exclusive forward methods
         elif forward_method in ["HRL_forward", "HRL_forward_rs"]:
-            bias = torch.zeros((output_dim, input_dim), dtype=params_dtype)
+            bias = torch.zeros((output_dim, input_dim), dtype=self.params_dtype)
             self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
         elif forward_method == "HNN_FC":
-            bias = torch.zeros((1, output_dim), dtype=params_dtype)
+            bias = torch.zeros((1, output_dim), dtype=self.params_dtype)
             self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
         elif forward_method == "HNN_MLR":
-            bias = torch.zeros((output_dim, input_dim), dtype=params_dtype)
+            bias = torch.zeros((output_dim, input_dim), dtype=self.params_dtype)
             self.bias = ManifoldParameter(bias, requires_grad=requires_grad, manifold=self.manifold)
         elif forward_method in ["HNNpp_FC", "HNNpp_MLR"]:
             # Bias is aligned and reduced to a scalar multiple of the tangent normal
-            bias = torch.zeros((output_dim, 1), dtype=params_dtype)
+            bias = torch.zeros((output_dim, 1), dtype=self.params_dtype)
             self.bias = torch.nn.Parameter(bias, requires_grad=requires_grad)
 
     def forward_manifold_FC(self, x: torch.Tensor) -> torch.Tensor:

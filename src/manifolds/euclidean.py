@@ -13,7 +13,7 @@ class Euclidean(Manifold):
         self,
         c: torch.Tensor=torch.tensor([0.]),
         trainable_c: bool=False,
-        dtype: torch.dtype=torch.float32,
+        dtype: str="float32",
     ):
         super().__init__(torch.tensor([0.]), trainable_c=False)
         self.name = "Euclidean"
@@ -22,6 +22,14 @@ class Euclidean(Manifold):
             print("Warning: trainable_c is not supported for Euclidean manifold. Setting it to False.")
         elif not torch.allclose(c, torch.zeros_like(c)):
             print("Warning: c!=0 is not supported for Euclidean manifold. Setting it to 0.")
+        if dtype == "float16":
+            self.dtype = torch.float16
+        elif dtype == "float32":
+            self.dtype = torch.float32
+        elif dtype == "float64":
+            self.dtype = torch.float64
+        else:
+            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """

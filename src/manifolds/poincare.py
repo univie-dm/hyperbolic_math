@@ -16,31 +16,34 @@ class PoincareBall(Manifold):
         self,
         c: torch.Tensor=torch.tensor([1.]),
         trainable_c: bool=False,
-        dtype: torch.dtype=torch.float32,
+        dtype: str="float32",
     ):
         super().__init__(c, trainable_c)
         self.name = "PoincareBall"
-        self.dtype = dtype
-        if torch.finfo(c.dtype).eps < torch.finfo(dtype).eps:
-            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}."
-                  f"All manifold operations will be performed in precision {c.dtype}!")
-            self.dtype = c.dtype
 
-        if self.dtype == torch.float16:
+        if dtype == "float16":
+            self.dtype = torch.float16
             # TODO: Unverified clamps w.r.t unittests
             self.min_enorm = 1e-15
             self.max_enorm_eps = 5e-2
-        elif self.dtype == torch.float32:
+        elif dtype == "float32":
+            self.dtype = torch.float32
             # TODO: Unverified clamps w.r.t unittests
             self.min_enorm = 1e-15
             # HRL: Max-clamp with 4e-3 to reproduce their results (likely not the case anymore)
             self.max_enorm_eps = 4e-3
-        elif self.dtype == torch.float64:
+        elif dtype == "float64":
+            self.dtype = torch.float64
             # Numerical Stable Unittests for 1e-15 < max_enorm_eps < 1e-07
             self.min_enorm = 1e-15
             self.max_enorm_eps = 5e-15
         else:
-            raise ValueError(f"Unsupported dtype: {self.dtype}")
+            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
+
+        if torch.finfo(c.dtype).eps < torch.finfo(self.dtype).eps:
+            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}."
+                  f"All manifold operations will be performed in precision {c.dtype}!")
+            self.dtype = c.dtype
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """
