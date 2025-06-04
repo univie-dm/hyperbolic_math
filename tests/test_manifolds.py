@@ -129,42 +129,6 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     assert res[0, 0] > r_zero
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
 
-@pytest.mark.skip(reason="matvec_mul was removed for now")
-def test_matvec_mul(manifold: Manifold, tolerance: Tuple[float, float],
-                    uniform_points: torch.Tensor) -> None:
-    """Test the matvec_mul operation."""
-    atol, rtol = tolerance
-    m1 = torch.randn(uniform_points.shape[-1], 10, dtype=uniform_points.dtype)
-    m2 = torch.randn(m1.shape[-1], 7, dtype=uniform_points.dtype)
-    # Consistency of matvec_mul with expmap_0 and logmap_0
-    torch.testing.assert_close(
-        manifold.matvec_mul(m1, uniform_points),
-        manifold.expmap_0(manifold.logmap_0(uniform_points) @ m1),
-        atol=atol,
-        rtol=rtol
-    )
-    # Matvec identity
-    torch.testing.assert_close(
-        manifold.matvec_mul(torch.zeros_like(m1), uniform_points),
-        torch.zeros((uniform_points.shape[0], m1.shape[-1]), dtype=uniform_points.dtype),
-        atol=atol,
-        rtol=rtol
-    )
-    # Matrix associativity
-    torch.testing.assert_close(
-        manifold.matvec_mul(m2, manifold.matvec_mul(m1, uniform_points)),
-        manifold.expmap_0(manifold.logmap_0(uniform_points) @ (m1 @ m2)),
-        atol=atol,
-        rtol=rtol
-    )
-
-@pytest.mark.skip(reason="not implemented yet")
-def test_hyperplane_forward(manifold: Manifold, tolerance: Tuple[float, float],
-                            uniform_points: torch.Tensor) -> None:
-    """Test the hyperplane_forward operation."""
-    atol, rtol = tolerance
-    pass
-
 def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
               uniform_points: torch.Tensor) -> None:
     """Test the dist and dist_0 operations."""
