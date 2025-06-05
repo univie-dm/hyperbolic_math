@@ -102,12 +102,12 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
         ######################################################
         x, a, p = self.manifold._2manifold_dtype([x, a, p])
         sqrt_c = self.manifold.c.sqrt()
-        diff = self.manifold.addition(-p, x, dim=-1, backproject=self.backproject) # (B, 1, out_dim, in_dim)
+        diff = self.manifold.addition(-p, x, axis=-1, backproject=self.backproject) # (B, 1, out_dim, in_dim)
         diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=True).clamp_min(1e-15) # (B, 1, out_dim, 1)
         sc_diff_a = (diff * a).sum(dim=-1, keepdim=True) # (B, 1, out_dim, 1)
         a_norm = a.norm(dim=-1, keepdim=True, p=2) # (out_dim, 1)
         num = 2.0 * sc_diff_a # (B, 1, out_dim, 1)
-        denom = torch.abs((1 - self.c * diff_norm2) * a_norm) + 1e-15 # (B, 1, out_dim, 1)
+        denom = torch.abs((1 - self.manifold.c * diff_norm2) * a_norm) + 1e-15 # (B, 1, out_dim, 1)
         signed_distance = arsinh(sqrt_c * num / denom) / sqrt_c # (B, 1, out_dim, 1)
         res = signed_distance * a_norm # (B, 1, out_dim, 1)
         return res
@@ -145,12 +145,12 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
 
         if self.version == "forward":
             # Compute the scaled signed distance to the hyperplane. Scale=Euclidean norm instead of the tangent norm of a
-            signed_distance = self._dist2hyperplane(input_p, a, p, backproject=self.backproject) # (B, 1, out_dim, 1)
+            signed_distance = self._dist2hyperplane(input_p, a, p) # (B, 1, out_dim, 1)
             signed_distance = signed_distance #* self.logits_multiplier # logits_multiplier==1
         elif self.version == "forward_rs":
             # Parallel transport a to the tangent space at p and return the signed distance to the hyperplane (no scaling)
             conformal_factor = 1 - self.manifold.c * p.pow(2).sum(dim=-1, keepdim=True) # (out_dim, 1) # not actually the conformal factor
-            signed_distance = self._dist2hyperplane(input_p, a*conformal_factor, p, backproject=self.backproject) # (B, 1, out_dim, 1)
+            signed_distance = self._dist2hyperplane(input_p, a*conformal_factor, p) # (B, 1, out_dim, 1)
             signed_distance = signed_distance * 2 / conformal_factor.view(1, 1, out_dim, 1) # (B, 1, out_dim, 1)
 
         signed_distance = signed_distance.sum(-1) # (B, 1, out_dim)

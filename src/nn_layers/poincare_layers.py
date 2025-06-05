@@ -77,10 +77,10 @@ class HyperbolicRegressionPoincare(HyperbolicParametrizedLayer):
         """
         x, a, p = self.manifold._2manifold_dtype([x, a, p])
         sqrt_c = self.manifold.c.sqrt()
-        sub = self.manifold.addition(-p.T.unsqueeze(0), x.unsqueeze(-1), dim=1, backproject=self.backproject) # (B, in_dim, out_dim)
+        sub = self.manifold.addition(-p.T.unsqueeze(0), x.unsqueeze(-1), axis=1, backproject=self.backproject) # (B, in_dim, out_dim)
         suba = (sub * a.T).sum(dim=1, keepdim=True) # (B, 1, out_dim)
-        a_norm = a.norm(p=2, axis=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm).T # (1, out_dim)
-        signed_dist2hyp = arsinh(sqrt_c * self.manifold._lambda(sub, dim=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
+        a_norm = a.norm(p=2, dim=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm).T # (1, out_dim)
+        signed_dist2hyp = arsinh(sqrt_c * self.manifold._lambda(sub, axis=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
         res = self.manifold._lambda(p, axis=self.hyperbolic_axis).T * a_norm * signed_dist2hyp.squeeze(1) # (B, out_dim)
         return res
 
@@ -147,7 +147,7 @@ class PoincareBaseLayerPP(HyperbolicParametrizedLayer):
         """
         sqrt_c = self.manifold.c.sqrt()
         sqrt_c2r = 2 * sqrt_c * r.T # (out_dim, 1)
-        z_norm = z.norm(p=2, axis=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm) # (out_dim, 1)
+        z_norm = z.norm(p=2, dim=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm) # (out_dim, 1)
         lambda_x = self.manifold._lambda(x, axis=self.hyperbolic_axis) # (B, 1)
         z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
         arsinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
@@ -265,7 +265,7 @@ class HyperbolicFullyConnectedPoincarePP(PoincareBaseLayerPP):
         sqrt_c = self.manifold.c.sqrt()
         w = sinh(sqrt_c * v) / sqrt_c # (B, out_dim)
         w2 = w.pow(2).sum(axis=self.hyperbolic_axis, keepdim=True) # (B, 1)
-        denom = 1 + (1 + self.c * w2).sqrt() # (B, 1)
+        denom = 1 + (1 + self.manifold.c * w2).sqrt() # (B, 1)
         res = w / denom # (B, out_dim)
         if self.backproject:
             res = self.manifold.proj(res, axis=self.hyperbolic_axis)

@@ -114,7 +114,7 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject)
          # HRL expands the weights to support multiple spaces at once
         # We don't use this. Instead we feed x of shape (B, on_dim)
         res = self.manifold.HRL_forward(x, self.weight, self.bias, version="HRL_forward", backproject=self.backproject)
@@ -127,7 +127,7 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject)
         # HRL expands the weights to support multiple spaces at once
         # We don't use this. Instead we feed x of shape (B, on_dim)
         res = self.manifold.HRL_forward(x, self.weight, self.bias, version="HRL_forward_rs", backproject=self.backproject)
@@ -143,10 +143,10 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (1, out_dim), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        assert self.manifold.is_in_manifold(self.bias, dim=-1)
+        assert self.manifold.is_in_manifold(self.bias, axis=-1)
         x = (x.unsqueeze(-1) * self.weight.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject) # (B, out_dim)
-        res = self.manifold.addition(x, self.bias, dim=-1, backproject=self.backproject) # (B, out_dim)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject) # (B, out_dim)
+        res = self.manifold.addition(x, self.bias, axis=-1, backproject=self.backproject) # (B, out_dim)
         return res
 
     def forward_HNN_MLR(self, x: torch.Tensor) -> torch.Tensor:
@@ -156,10 +156,10 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, in_dim), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        assert self.manifold.is_in_manifold(self.bias, dim=-1)
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        assert self.manifold.is_in_manifold(self.bias, axis=-1)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject)
         # Map self.weights from the tangent space at the origin to the tangent space at self.bias
-        pt_weight = self.manifold.ptransp_0(self.weight, self.bias, dim=-1) # (out_dim, in_dim)
+        pt_weight = self.manifold.ptransp_0(self.weight, self.bias, axis=-1) # (out_dim, in_dim)
         res = self.manifold.HNN_MLR(x, pt_weight, self.bias, backproject=self.backproject)
         return res
 
@@ -170,7 +170,7 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, 1), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject)
         res = self.manifold.HNNpp_forward(x, self.weight, self.bias, version="HNNpp_FC", backproject=self.backproject)
         return res
 
@@ -181,7 +181,7 @@ class Embedding(torch.nn.Module):
         Shapes: x: (B, in_dim), self.weight: (out_dim, in_dim), self.bias: (out_dim, 1), res: (B, out_dim)
         [Only defined for the PoincareBall]
         """
-        x = self.manifold.expmap_0(x, dim=-1, backproject=self.backproject)
+        x = self.manifold.expmap_0(x, axis=-1, backproject=self.backproject)
         res = self.manifold.HNNpp_forward(x, self.weight, self.bias, version="HNNpp_MLR", backproject=self.backproject)
         return res
 
