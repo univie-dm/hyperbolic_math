@@ -1,4 +1,4 @@
-import torch.optim
+import torch
 
 from typing import Any, Dict, Iterable, Tuple, Union
 from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
@@ -35,6 +35,8 @@ class RiemannianAdam(torch.optim.Adam):
         Update the parameters with exponential map instead of retraction (default: False)
     backproject : bool
         Whether to project results back to the manifold (default: True)
+    hyperbolic_axis : int
+        Axis along which the parameters are hyperbolic (default: -1)
 
     .. _On the Convergence of Adam and Beyond:
         https://openreview.net/forum?id=ryQu7f-RZ
@@ -44,7 +46,6 @@ class RiemannianAdam(torch.optim.Adam):
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
         arXiv (2020).
     """
-
     def __init__(
         self,
         params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]],
@@ -54,7 +55,8 @@ class RiemannianAdam(torch.optim.Adam):
         weight_decay: float = 0,
         amsgrad: bool = False,
         expmap_update: bool = False,
-        backproject: bool = True
+        backproject: bool = True,
+        hyperbolic_axis: int = -1
     ):
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -77,6 +79,7 @@ class RiemannianAdam(torch.optim.Adam):
         super().__init__(params, **defaults)
         self.expmap_update = expmap_update
         self.backproject = backproject
+        self.hyperbolic_axis = hyperbolic_axis
 
     def step(self) -> None:
         with torch.no_grad():
@@ -115,12 +118,12 @@ class RiemannianAdam(torch.optim.Adam):
                     exp_avg_sq = state["exp_avg_sq"]
                     # Actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, dim=-1)
+                    grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
 
                     if param_is_hyperbolic:
                         # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
-                        exp_avg_sq_new = manifold.tangent_inner(grad, grad, point, dim=-1)
+                        exp_avg_sq_new = manifold.tangent_inner(grad, grad, point, axis=self.hyperbolic_axis)
                         exp_avg_sq_new = exp_avg_sq_new.to(grad.dtype)
                     else:
                         # Euclidean parameter: Compute grad^2 component-wise
@@ -145,12 +148,12 @@ class RiemannianAdam(torch.optim.Adam):
                         pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * direction, point, dim=-1, backproject=self.backproject)
+                        new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis, backproject=self.backproject)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * direction, point, dim=-1, backproject=self.backproject)
+                        new_point = manifold.retraction(-learning_rate * direction, point, axis=self.hyperbolic_axis, backproject=self.backproject)
                     # Parallel transport the exponential averaging to the new point
-                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, dim=-1)
+                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, axis=self.hyperbolic_axis)
                     # Use copy only for user facing point
                     new_point = new_point.to(point.dtype)
                     exp_avg_new = exp_avg_new.to(exp_avg.dtype)

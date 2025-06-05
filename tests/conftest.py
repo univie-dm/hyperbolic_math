@@ -35,7 +35,7 @@ def manifold(seed: None, dtype: str, request: pytest.FixtureRequest) -> Manifold
     """Test different manifolds and curvatures."""
     if dtype == "float32":
         c_dtype = torch.float32
-    else:
+    else:   # float64
         c_dtype = torch.float64
     c = torch.empty(1, dtype=c_dtype).exponential_(0.5)
     return request.param(c=c, dtype=dtype)

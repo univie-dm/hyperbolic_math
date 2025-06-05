@@ -18,7 +18,7 @@ def test_riemannian_adam(manifold: Manifold, tolerance: Tuple[float, float],
     optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update, backproject=True)
     for _ in range(300_000):
         optim.zero_grad()
-        loss = manifold.dist(start, target, dim=-1).pow(2).mean()
+        loss = manifold.dist(start, target).pow(2).mean()
         if loss < rtol:
             break
         loss.backward()
@@ -38,7 +38,7 @@ def test_riemannian_sgd(manifold: Manifold, tolerance: Tuple[float, float],
     optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update, backproject=True)
     for _ in range(1000):
         optim.zero_grad()
-        loss = manifold.dist(start, target, dim=-1).pow(2).mean()
+        loss = manifold.dist(start, target).pow(2).mean()
         if loss < rtol:
             break
         loss.backward()

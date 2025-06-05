@@ -1,4 +1,4 @@
-import torch.optim.optimizer
+import torch
 
 from typing import Any, Dict, Iterable, Union
 from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
@@ -33,13 +33,14 @@ class RiemannianSGD(torch.optim.Optimizer):
         Update the parameters with exponential map instead of retraction (default: False)
     backproject : bool
         Whether to project results back to the manifold (default: True)
+    hyperbolic_axis : int
+        Axis along which the parameters are hyperbolic (default: -1)
 
     References
     ----------
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
         arXiv (2020).
     """
-
     def __init__(
         self,
         params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]],
@@ -49,7 +50,8 @@ class RiemannianSGD(torch.optim.Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
         expmap_update: bool = False,
-        backproject: bool = True
+        backproject: bool = True,
+        hyperbolic_axis: int = -1
     ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -70,6 +72,7 @@ class RiemannianSGD(torch.optim.Optimizer):
         super().__init__(params, defaults)
         self.expmap_update = expmap_update
         self.backproject = backproject
+        self.hyperbolic_axis = hyperbolic_axis
 
     def step(self) -> None:
         with torch.no_grad():
@@ -101,7 +104,7 @@ class RiemannianSGD(torch.optim.Optimizer):
 
                     # Actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, dim=-1)
+                    grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
                     if momentum > 0:
                         momentum_buffer = state["momentum_buffer"]
                         momentum_buffer.mul_(momentum).add_(grad, alpha=1 - dampening)
@@ -115,14 +118,14 @@ class RiemannianSGD(torch.optim.Optimizer):
                         pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * grad, point, dim=-1, backproject=self.backproject)
+                        new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis, backproject=self.backproject)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * grad, point, dim=-1, backproject=self.backproject)
+                        new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis, backproject=self.backproject)
 
                     if momentum > 0:
                         # Parallel transport the momentum to the new point
-                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, dim=-1)
+                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, axis=self.hyperbolic_axis)
                         new_momentum_buffer = new_momentum_buffer.to(momentum_buffer.dtype)
                         momentum_buffer.copy_(new_momentum_buffer)
                     # Use copy only for user facing point

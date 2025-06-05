@@ -18,14 +18,14 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
 
     Returns
     -------
-    torch.Tensor
+    distmat : torch.Tensor
         The tensor containing the pairwise distances between points
     """
     device = points.device
     distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
     indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
     while indices.shape[1] > 0:
-        dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]], dim=-1).reshape(-1)
+        dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]]).reshape(-1)
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
         distmat[indices[1,:batch_size], indices[0,:batch_size]] = dist_batch
         indices = indices[:, batch_size:]
@@ -49,7 +49,7 @@ def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, versio
 
     Returns
     -------
-    tuple
+    delta, diam, rel_delta : tuple
         Tuple containing the delta value, the diameter of the distance matrix, and the relative delta
     """
     # Subsample points and compute pairwise distances
@@ -81,7 +81,7 @@ def compute_hyperbolic_delta(distmat: torch.Tensor, version: str) -> torch.Tenso
 
     Returns
     -------
-    torch.Tensor
+    res : torch.Tensor
         The delta hyperbolicity value
     """
     # Set the first point as reference point and compute the pair-wise Gromov product
@@ -96,4 +96,5 @@ def compute_hyperbolic_delta(distmat: torch.Tensor, version: str) -> torch.Tenso
     else:   # smallest delta
         delta = (max_min_prod - gromov_prod_mat).max()
     # Rescale delta since a reference point was fixed
-    return 2 * delta
+    res = 2 * delta
+    return res
