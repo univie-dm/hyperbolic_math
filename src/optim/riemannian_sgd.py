@@ -74,7 +74,10 @@ class RiemannianSGD(torch.optim.Optimizer):
         self.backproject = backproject
         self.hyperbolic_axis = hyperbolic_axis
 
-    def step(self) -> None:
+    def step(self, closure=None) -> None:
+        loss = None
+        if closure is not None:
+            loss = closure()
         with torch.no_grad():
             for group in self.param_groups:
                 if "step" not in group:
@@ -131,3 +134,4 @@ class RiemannianSGD(torch.optim.Optimizer):
                     # Use copy only for user facing point
                     new_point = new_point.to(point.dtype)
                     point.copy_(new_point)
+        return loss

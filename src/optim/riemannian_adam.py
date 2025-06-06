@@ -81,7 +81,10 @@ class RiemannianAdam(torch.optim.Adam):
         self.backproject = backproject
         self.hyperbolic_axis = hyperbolic_axis
 
-    def step(self) -> None:
+    def step(self, closure=None) -> None:
+        loss = None
+        if closure is not None:
+            loss = closure()
         with torch.no_grad():
             for group in self.param_groups:
                 betas = group["betas"]
@@ -159,3 +162,4 @@ class RiemannianAdam(torch.optim.Adam):
                     exp_avg_new = exp_avg_new.to(exp_avg.dtype)
                     point.copy_(new_point)
                     exp_avg.copy_(exp_avg_new)
+        return loss
