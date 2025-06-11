@@ -193,7 +193,7 @@ class HyperbolicParametrizedLayer(HyperbolicBaseLayer):
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
-            print(f"Warning: Embedding.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
+            print(f"Warning: HyperbolicLayer.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
                   f"All manifold operations will be performed in lower precision {manifold.dtype}!")
 
         self.requires_grad = requires_grad
