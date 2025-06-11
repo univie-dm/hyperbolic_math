@@ -95,7 +95,7 @@ def create_figure(points: torch.Tensor,
         # TODO: For hyperbolic methods some results are no longer on the manifold
         #assert manifold.is_in_manifold(torch.from_numpy(points)), "Points are not in the manifold"
     else:
-        points = points.numpy()
+        points = points.cpu().numpy()
         hyperplanes = (hyperplanes[0].numpy(), hyperplanes[1].numpy()) if hyperplanes is not None else None
         ax.set_title(f"{settings['title']}")
     handles = plot_2d_points(points, ax, labels)
