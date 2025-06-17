@@ -1,5 +1,6 @@
 import torch
 
+import copy
 from typing import List
 
 
@@ -114,3 +115,11 @@ class ManifoldParameter(torch.nn.Parameter):
 
     def __repr__(self) -> str:
         return f"{self.manifold.name} Parameter containing:\n" + super(torch.nn.Parameter, self).__repr__()
+
+    def __deepcopy__(self, memo):
+        # Deep copy the data
+        new_data = copy.deepcopy(self.data, memo)
+        # NOTE: Don't deepcopy the manifold because Manifoldparameter never takes ownership of it.
+        manifold = self.manifold
+        result = ManifoldParameter(new_data, self.requires_grad, manifold)
+        return result
