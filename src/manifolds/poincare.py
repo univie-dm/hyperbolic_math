@@ -36,7 +36,7 @@ class PoincareBall(Manifold):
             self.dtype = torch.float64
             # Numerical Stable Unittests for 1e-15 < max_enorm_eps < 1e-07
             self.min_enorm = 1e-15
-            self.max_enorm_eps = 5e-15
+            self.max_enorm_eps = 1e-7 #TODO: Hotfix for now due to numerical stability issues in hyperhyperlayers
         else:
             raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
 
