@@ -16,23 +16,23 @@ class PoincareBall(Manifold):
         self,
         c: torch.Tensor = torch.tensor([1.]),
         trainable_c: bool = False,
-        dtype: str = "float32",
+        dtype: str | torch.dtype = "float32",
     ):
         super().__init__(c, trainable_c)
         self.name = "PoincareBall"
 
-        if dtype == "float16":
+        if dtype == "float16" or dtype == torch.float16:
             self.dtype = torch.float16
             # TODO: Unverified clamps w.r.t unittests
             self.min_enorm = 1e-15
             self.max_enorm_eps = 5e-2
-        elif dtype == "float32":
+        elif dtype == "float32" or dtype == torch.float32:
             self.dtype = torch.float32
             # TODO: Unverified clamps w.r.t unittests
             self.min_enorm = 1e-15
             # HRL: Max-clamp with 4e-3 to reproduce their results (likely not the case anymore)
             self.max_enorm_eps = 4e-3
-        elif dtype == "float64":
+        elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
             # Numerical Stable Unittests for 1e-15 < max_enorm_eps < 1e-07
             self.min_enorm = 1e-15

@@ -214,6 +214,7 @@ class HyperbolicFullyConnectedPoincarePP(PoincareBaseLayerPP):
     Module to compute the 'Hyperbolic Neural Networks ++' fully connected layer:
         0) Project the input tensor onto the manifold (optional)
         1) Compute the multinomial linear regression score(s)
+        2) Calculate the generalized linear transformation from the reggression score(s)
 
     Parameters
     ----------

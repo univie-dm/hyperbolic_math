@@ -140,7 +140,7 @@ class Proj(HyperbolicBaseLayer):
         return self.manifold.proj(x, axis=self.hyperbolic_axis)
 
 
-# Dictionary mapping dtype strings to torch dtypes
+# Dictionary mapping of dtype strings to torch dtypes
 DTYPE_MAP: Dict[str, torch.dtype] = {
     "float16": torch.float16,
     "float32": torch.float32,
