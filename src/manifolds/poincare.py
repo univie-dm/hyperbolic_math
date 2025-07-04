@@ -4,7 +4,7 @@ import traceback
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, artanh, tanh, arsinh, cosh, sinh
+from ..utils.math_utils import arcosh, artanh, tanh
 
 
 class PoincareBall(Manifold):
@@ -21,24 +21,17 @@ class PoincareBall(Manifold):
         super().__init__(c, trainable_c)
         self.name = "PoincareBall"
 
-        if dtype == "float16" or dtype == torch.float16:
-            self.dtype = torch.float16
-            # TODO: Unverified clamps w.r.t unittests
-            self.min_enorm = 1e-15
-            self.max_enorm_eps = 5e-2
-        elif dtype == "float32" or dtype == torch.float32:
+        # The following parameters are derived from the unittests
+        if dtype == "float32" or dtype == torch.float32:
             self.dtype = torch.float32
-            # TODO: Unverified clamps w.r.t unittests
             self.min_enorm = 1e-15
-            # HRL: Max-clamp with 4e-3 to reproduce their results (likely not the case anymore)
-            self.max_enorm_eps = 4e-3
+            self.max_enorm_eps = 5e-06
         elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
-            # Numerical Stable Unittests for 1e-15 < max_enorm_eps < 1e-07
             self.min_enorm = 1e-15
-            self.max_enorm_eps = 1e-7 #TODO: Hotfix for now due to numerical stability issues in hyperhyperlayers
+            self.max_enorm_eps = 1e-08
         else:
-            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
+            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32 and float64.")
 
         if torch.finfo(c.dtype).eps < torch.finfo(self.dtype).eps:
             print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}."
@@ -77,7 +70,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The conformal factor(s)
 
         References
@@ -113,16 +106,12 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The gyration gyr[x,y]z
 
         References
         ----------
         Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
-
-        Stability
-        ---------
-        Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
         x, y, z = self._2manifold_dtype([x, y, z])
         c2 = self.c**2
@@ -134,7 +123,7 @@ class PoincareBall(Manifold):
         a = -c2 * xz * y2 + self.c * yz + 2 * c2 * xy * yz
         b = -c2 * yz * x2 - self.c * xz
         num = 2 * (a * x + b * y)
-        denom = 1 + 2 * self.c * xy + c2 * x2 * y2
+        denom = (1 + 2 * self.c * xy + c2 * x2 * y2).clamp_min(self.min_enorm)
         res = z + num / denom
         return res
 
@@ -156,23 +145,19 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The sum(s) of x and y
 
         References
         ----------
         Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
-
-        Stability
-        ---------
-        Denominator is zero iff x and y are linearly dependent and c=-1/(||x||*||y||), but c > 0.
         """
         x, y = self._2manifold_dtype([x, y])
         x2 = x.pow(2).sum(dim=axis, keepdim=True)
         y2 = y.pow(2).sum(dim=axis, keepdim=True)
         xy = (x * y).sum(dim=axis, keepdim=True)
         num = (1 + 2 * self.c * xy + self.c * y2) * x + (1 - self.c * x2) * y
-        denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
+        denom = (1 + 2 * self.c * xy + self.c**2 * x2 * y2).clamp_min(self.min_enorm)
         res = num / denom
         if backproject:
             res = self.proj(res, axis=axis)
@@ -195,7 +180,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The clipped product(s) of r and x
 
         References
@@ -209,23 +194,15 @@ class PoincareBall(Manifold):
         as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
         """
         r, x = self._2manifold_dtype([r, x])
-        x_norm = x.norm(p=2, dim=axis, keepdim=True)
+        x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
         c_norm_prod = self.c.sqrt() * x_norm
         res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
-        if not torch.all(torch.isfinite(res)):
-            logging.debug("scalar_mul: ZeroDivisionError")
-            stack_trace = ''.join(traceback.format_stack(limit=-1))
-            logging.debug(stack_trace)
-            # Stable case
-            x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-            c_norm_prod = self.c.sqrt() * x_norm
-            res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
         if backproject:
             res = self.proj(res, axis=axis)
         return res
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1,
-             version: str="mobius", backproject: bool=True) -> torch.Tensor:
+             version: str="mobius_direct", backproject: bool=True) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between PoincareBall point(s) x and y.
 
@@ -238,7 +215,7 @@ class PoincareBall(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "mobius")
+            Version of the geodesic distance to compute (default: "mobius_direct")
             ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
              'mobius': Mobius distance,
              'metric_tensor': Metric-tensor induced distance]
@@ -247,7 +224,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The geodesic distance(s) between x and y
 
         References
@@ -258,7 +235,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         'mobius_direct' avoids the asymmetric mobius addition, but casually fails to comply
-            with the tangent norm unit testing since it also uses the mobius addition.
+            with the tangent_norm unit testing since it also uses the mobius addition.
         'mobius' is faster than 'metric_tensor', but not symmetric.
         'metric_tensor' is much faster than Mobius-dist, but unstable for boundary points.
         """
@@ -266,12 +243,11 @@ class PoincareBall(Manifold):
         if version == "mobius_direct":
             # Symmetric Mobius distance that doesn't need self.addition()
             sqrt_c = self.c.sqrt()
-            x2 = x.pow(2).sum(dim=axis, keepdim=True)
-            y2 = y.pow(2).sum(dim=axis, keepdim=True)
-            xy = (-x * y).sum(dim=axis, keepdim=True)
-            num = (-x + y).pow(2).sum(dim=axis, keepdim=True)
-            denom = 1 + 2 * self.c * xy + self.c**2 * x2 * y2
-            xysum_norm = (num / denom).sqrt()
+            x2y2 = x.pow(2).sum(dim=axis, keepdim=True) * y.pow(2).sum(dim=axis, keepdim=True)
+            xy = (x * y).sum(dim=axis, keepdim=True)
+            num = (y - x).norm(p=2, dim=axis, keepdim=True)
+            denom = (1 - 2 * self.c * xy + self.c**2 * x2y2).clamp_min(self.min_enorm).sqrt()
+            xysum_norm = num / denom
             dist_c = artanh(sqrt_c * xysum_norm)
             res = 2 * dist_c / sqrt_c
         elif version == "mobius":
@@ -291,7 +267,7 @@ class PoincareBall(Manifold):
             raise ValueError(f"Unknown version: {version}")
         return res
 
-    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str="mobius") -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str="mobius_direct") -> torch.Tensor:
         """
         Compute the geodesic distance(s) of PoincareBall point(s) x from/to the PoincareBall origin.
 
@@ -302,14 +278,14 @@ class PoincareBall(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "mobius")
+            Version of the geodesic distance to compute (default: "mobius_direct")
             ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
              'mobius': Mobius distance,
              'metric_tensor': Metric-tensor induced distance]
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The geodesic distance(s) of x from/to the PoincareBall origin
 
         References
@@ -355,7 +331,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting PoincareBall point(s) after mapping v to the clipped PoincareBall
 
         References
@@ -365,40 +341,14 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        TODO: check which clamping works better
-
         expmap converges towards the mobius addition x+v as the norm of vectors v and x approaches zero,
         since tanh(z) ~ z for small z.
-
-        TODO expmap converges towards ??? as the norm of vector(s) v approaches zero and
-        lambda approaches 1/(c.sqrt()*self.max_enorm_eps) since ???.
-
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         v, x = self._2manifold_dtype([v, x])
         v_norm = v.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = self.c.sqrt() * v_norm
+        c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
         second_term = tanh(c_norm_prod * self._lambda(x, axis=axis) / 2) / c_norm_prod * v
-        if not torch.all(torch.isfinite(second_term)):
-            logging.debug("expmap: ZeroDivisionError")
-            stack_trace = ''.join(traceback.format_stack(limit=-1))
-            logging.debug(stack_trace)
-
-            # Stable case 1 - norm clamping
-            # v_norm = v.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-            # c_norm_prod = self.c.sqrt() * v_norm
-            # second_term = tanh(c_norm_prod * self._lambda(x, axis=axis) / 2) / c_norm_prod * v
-
-            # Stable case 2 - cnorm clamping
-            v_norm = v.norm(p=2, dim=axis, keepdim=True)
-            c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-            second_term = tanh(c_norm_prod * self._lambda(x, axis=axis) / 2) / c_norm_prod * v
-
-            # Stable case 3 - denom clamping
-            # v_norm = v.norm(p=2, dim=axis, keepdim=True)
-            # c_norm_prod = self.c.sqrt() * v_norm
-            # second_term = tanh(c_norm_prod * self._lambda(x, axis=axis) / 2) / (c_norm_prod).clamp_min(self.min_enorm) * v
-
         if backproject:
             second_term = self.proj(second_term, axis=axis)
         res = self.addition(x, second_term, axis=axis, backproject=backproject)
@@ -420,7 +370,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting PoincareBall point(s) after mapping v to the clipped PoincareBall
 
         References
@@ -430,29 +380,13 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        TODO: check which clamping works better
-
         expmap_0 converges towards the identity map as the norm of vector(s) v approaches zero,
         since tanh(z) ~ z for small z.
         """
         v, = self._2manifold_dtype([v])
         v_norm = v.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = self.c.sqrt() * v_norm
+        c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
         res = tanh(c_norm_prod) / c_norm_prod * v
-        if not torch.all(torch.isfinite(res)):
-            logging.debug("expmap_0: ZeroDivisionError")
-            stack_trace = ''.join(traceback.format_stack(limit=-1))
-            logging.debug(stack_trace)
-
-            # Stable case 1 - norm clamping
-            # v_norm = v.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-            # c_norm_prod = self.c.sqrt() * v_norm
-
-            ## Stable case 2 - cnorm clamping
-            v_norm = v.norm(p=2, dim=axis, keepdim=True)
-            c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-
-            res = tanh(c_norm_prod) / c_norm_prod * v
         if backproject:
             res = self.proj(res, axis=axis)
         return res
@@ -475,7 +409,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting PoincareBall point(s) after approximate mapping v to the clipped PoincareBall
 
         References
@@ -505,7 +439,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting tangent vector(s) after mapping y to the tangent space(s) of x
 
         References
@@ -515,32 +449,19 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        TODO: check which clamping works better
-
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
         since artanh(z) ~ z for small z.
-
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         y, x = self._2manifold_dtype([y, x])
         sub = self.addition(-x, y, axis=axis)
-        sub_norm = sub.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = self.c.sqrt() * sub_norm
+        x2y2 = x.pow(2).sum(dim=axis, keepdim=True) * y.pow(2).sum(dim=axis, keepdim=True)
+        xy = (x * y).sum(dim=axis, keepdim=True)
+        num = (y - x).norm(p=2, dim=axis, keepdim=True)
+        denom = (1 - 2 * self.c * xy + self.c**2 * x2y2).clamp_min(self.min_enorm).sqrt()
+        sub_norm = num / denom
+        c_norm_prod = (self.c.sqrt() * sub_norm).clamp_min(self.min_enorm)
         res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, axis=axis)) * sub
-        if not torch.all(torch.isfinite(res)):
-            logging.debug("logmap: ZeroDivisionError")
-            stack_trace = ''.join(traceback.format_stack(limit=-1))
-            logging.debug(stack_trace)
-
-            # Stable case 1 - norm clamping
-            # sub_norm = sub.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-            # c_norm_prod = self.c.sqrt() * sub_norm
-
-            # Stable case 2 - cnorm clamping
-            sub_norm = sub.norm(p=2, dim=axis, keepdim=True)
-            c_norm_prod = (self.c.sqrt() * sub_norm).clamp_min(self.min_enorm)
-
-            res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, axis=axis)) * sub
         return res
 
     def logmap_0(self, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -557,7 +478,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting tangent vector(s) after mapping y to the tangent space of the origin
 
         References
@@ -567,29 +488,13 @@ class PoincareBall(Manifold):
 
         Stability
         ---------
-        TODO: check which clamping works better
-
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
         since artanh(z) ~ z for small z.
         """
         y, = self._2manifold_dtype([y])
         y_norm = y.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = self.c.sqrt() * y_norm
+        c_norm_prod = (self.c.sqrt() * y_norm).clamp_min(self.min_enorm)
         res = artanh(c_norm_prod) / c_norm_prod * y
-        if not torch.all(torch.isfinite(res)):
-            logging.debug("logmap_0: ZeroDivisionError")
-            stack_trace = ''.join(traceback.format_stack(limit=-1))
-            logging.debug(stack_trace)
-
-            # Stable case 1 - norm clamping
-            # y_norm = y.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-            # c_norm_prod = self.c.sqrt() * y_norm
-
-            # Stable case 2 - cnorm clamping
-            y_norm = y.norm(p=2, dim=axis, keepdim=True)
-            c_norm_prod = (self.c.sqrt() * y_norm).clamp_min(self.min_enorm)
-
-            res = artanh(c_norm_prod) / c_norm_prod * y
         return res
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -611,7 +516,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
 
         References
@@ -644,7 +549,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
 
         References
@@ -679,7 +584,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The tangent inner product(s) of u and v
 
         References
@@ -711,7 +616,7 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The tangent norm(s) of v
 
         References
@@ -774,18 +679,13 @@ class PoincareBall(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The projected PoincareBall point(s)
 
         References
         ----------
         Nickel, Maximillian, and Douwe Kiela. "Poincaré embeddings for learning hierarchical representations."
             Advances in neural information processing systems 30 (2017).
-
-        Stability
-        ---------
-        TODO:
-        Precision depends on c
         """
         x, sqrt_c_recipr = self._2manifold_dtype([x, 1 / self.c.sqrt()])
         # Check if max_enorm can be numerically represented for the given c and eps

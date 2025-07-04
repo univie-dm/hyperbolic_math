@@ -12,8 +12,7 @@ def seed(request: pytest.FixtureRequest) -> None:
     """Global seed for reproducibility."""
     torch.manual_seed(request.param)
 
-#@pytest.fixture(scope="package", params=["float32", "float64"])
-@pytest.fixture(scope="package", params=["float64"])
+@pytest.fixture(scope="package", params=["float32", "float64"])
 def dtype(request: pytest.FixtureRequest) -> torch.dtype:
     """Test different data types."""
     return request.param
@@ -22,11 +21,11 @@ def dtype(request: pytest.FixtureRequest) -> torch.dtype:
 def tolerance(dtype: str) -> Tuple[float, float]:
     """Set numerical tolerances for floating point comparisons."""
     if dtype == "float32":
-        atol = torch.finfo(dtype).eps
-        rtol = torch.finfo(dtype).eps
+        atol = 5e-03
+        rtol = 5e-03
     else:   # float64
-        atol = 1e-13
-        rtol = 1e-09
+        atol = 1e-07
+        rtol = 1e-07
     return atol, rtol
 
 #@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])

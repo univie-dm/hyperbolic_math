@@ -21,9 +21,7 @@ class Euclidean(Manifold):
             print("Warning: trainable_c is not supported for Euclidean manifold. Setting it to False.")
         elif not torch.allclose(c, torch.zeros_like(c)):
             print("Warning: c!=0 is not supported for Euclidean manifold. Setting it to 0.")
-        if dtype == "float16" or dtype == torch.float16:
-            self.dtype = torch.float16
-        elif dtype == "float32" or dtype == torch.float32:
+        if dtype == "float32" or dtype == torch.float32:
             self.dtype = torch.float32
         elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
@@ -67,7 +65,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The sum(s) of x and y
         """
         x, y = self._2manifold_dtype([x, y])
@@ -92,7 +90,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The product(s) of r and x
         """
         x, r = self._2manifold_dtype([x, r])
@@ -124,7 +122,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The geodesic distance(s) between x and y
         """
         x, y = self._2manifold_dtype([x, y])
@@ -144,7 +142,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The geodesic distance(s) of x from/to the Euclidean origin
         """
         x, = self._2manifold_dtype([x])
@@ -170,7 +168,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The point(s) after mapping v to the Euclidean manifold
         """
         v, x = self._2manifold_dtype([v, x])
@@ -194,7 +192,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The point(s) after mapping v to the Euclidean manifold
         """
         v, = self._2manifold_dtype([v])
@@ -220,7 +218,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The point(s) after approximately mapping v to the Euclidean manifold
         """
         v, x = self._2manifold_dtype([v, x])
@@ -244,7 +242,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting tangent vector(s) after mapping y to the tangent space(s) of x
         """
         y, x = self._2manifold_dtype([y, x])
@@ -266,7 +264,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The resulting tangent vector(s) after mapping y to the tangent space of the origin
         """
         y, = self._2manifold_dtype([y])
@@ -292,7 +290,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
         """
         v, = self._2manifold_dtype([v])
@@ -316,7 +314,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
         """
         v, = self._2manifold_dtype([v])
@@ -341,7 +339,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The tangent inner product(s) of u and v
         """
         u, v = self._2manifold_dtype([u, v])
@@ -364,7 +362,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The tangent norm(s) of v
         """
         v, = self._2manifold_dtype([v])
@@ -407,7 +405,7 @@ class Euclidean(Manifold):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.dtype)
             The projected Euclidean manifold point(s)
         """
         x, = self._2manifold_dtype([x])
