@@ -26,7 +26,7 @@ class Euclidean(Manifold):
         elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
         else:
-            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float16, float32, and float64.")
+            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32, and float64.")
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """
