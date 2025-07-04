@@ -142,7 +142,6 @@ class Proj(HyperbolicBaseLayer):
 
 # Dictionary mapping of dtype strings to torch dtypes
 DTYPE_MAP: Dict[str, torch.dtype] = {
-    "float16": torch.float16,
     "float32": torch.float32,
     "float64": torch.float64,
 }
@@ -153,7 +152,7 @@ def get_torch_dtype(dtype_str: str) -> torch.dtype:
     Parameters
     ----------
     dtype_str : str
-        String representation of dtype ('float16', 'float32', or 'float64')
+        String representation of dtype ('float32', or 'float64')
 
     Returns
     -------

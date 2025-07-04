@@ -1,6 +1,4 @@
-import logging
 import torch
-import traceback
 
 from typing import List
 from .manifold import Manifold

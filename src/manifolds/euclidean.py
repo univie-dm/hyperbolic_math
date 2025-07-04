@@ -97,13 +97,6 @@ class Euclidean(Manifold):
         res = r * x
         return res
 
-    def dist2hyperplane(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
-                        axis: int=-1, backproject: bool=True) -> torch.Tensor:
-        """
-        #TODO
-        """
-        pass
-
     def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Euclidean manifold points x and y.

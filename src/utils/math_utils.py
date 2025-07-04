@@ -7,13 +7,10 @@ import torch
 @torch.jit.script
 def _get_tensor_eps(
     x: torch.Tensor,
-    eps16: float = torch.finfo(torch.float16).eps,
     eps32: float = torch.finfo(torch.float32).eps,
     eps64: float = torch.finfo(torch.float64).eps,
 ) -> float:
-    if x.dtype == torch.float16:
-        return eps16
-    elif x.dtype == torch.float32:
+    if x.dtype == torch.float32:
         return eps32
     elif x.dtype == torch.float64:
         return eps64
