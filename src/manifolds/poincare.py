@@ -689,7 +689,7 @@ class PoincareBall(Manifold):
         # Check if max_enorm can be numerically represented for the given c and eps
         max_enorm = sqrt_c_recipr - self.max_enorm_eps
         assert max_enorm < sqrt_c_recipr
-        x_norm = x.norm(p=2, dim=axis, keepdim=True)
+        x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
         proj_x = (max_enorm / x_norm) * x
         res = torch.where(x_norm > max_enorm, proj_x, x)
         return res
