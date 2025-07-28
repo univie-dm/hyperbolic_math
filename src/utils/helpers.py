@@ -3,7 +3,7 @@ import torch
 from ..manifolds import Manifold
 
 
-def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000) -> torch.Tensor:
+def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000) -> torch.Tensor:
     """
     Computes the pairwise distances between points on a given manifold.
 
@@ -14,7 +14,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
     manifold : Manifold
         The manifold on which the points lie
     batch_size : int (optional)
-        The batch size for computing distances in chunks (default: 1_000)
+        The batch size for computing distances in chunks (default: 1_000_000)
 
     Returns
     -------

@@ -738,13 +738,31 @@ class PoincareBall(Manifold):
         res = True
         return res
 
+    def to_hyperboloid(self, x: torch.Tensor, ideal: bool=False, axis: int=-1) -> torch.Tensor:
+        """
+        Map PoincareBall point(s) x to the Hyperboloid.
 
-    ################
-    ## Miscalleneous (might be useful) - Geoopt implementation available
+        Parameters
+        ----------
+        x : torch.Tensor
+            PoincareBall point(s)
+        ideal : bool
+            Whether to convert x to ideal (=null cone) Hyperboloid point(s) (default: False)
+        axis : int
+            Axis along which to compute the mapping (default: -1)
 
-    # def _proj_to_hyperboloid(self, x, c):
-    #     K = 1.0 / c
-    #     sqrtK = K**0.5
-    #     sqnorm = torch.norm(x, p=2, dim=1, keepdim=True) ** 2
-    #     return sqrtK * torch.cat([K + sqnorm, 2 * sqrtK * x], dim=1) / (K - sqnorm)
-
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The Hyperboloid point(s)
+        """
+        x, = self._2manifold_dtype([x])
+        if ideal:
+            res0 = torch.ones_like(x.narrow(axis, 0, 1))
+            res = torch.cat([res0, self.c.sqrt() * x], dim=axis)
+        else:
+            cx2 = self.c * x.pow(2).sum(dim=axis, keepdim=True)
+            res0 = (1. + cx2) / self.c.sqrt()
+            res = torch.cat([res0, 2 * x], dim=axis)
+            res = res / (1. - cx2)
+        return res

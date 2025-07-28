@@ -120,7 +120,6 @@ def create_figure(points: torch.Tensor,
     else:
         return fig
 
-
 def pointsTo2d(x: torch.Tensor, manifold: Manifold,
                hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None],
                settings: dict) -> Tuple[npt.ArrayLike, Union[npt.ArrayLike, None]]:
@@ -162,7 +161,6 @@ def pointsTo2d(x: torch.Tensor, manifold: Manifold,
 
     return points, hyperplanes
 
-
 def plot_2d_points(x: npt.ArrayLike, ax: plt.Axes, labels: Union[npt.ArrayLike, None]=None) -> List[plt.Line2D]:
     """Plot 2d PoincareBall points with labels (optional)."""
     if labels is None:
@@ -181,7 +179,6 @@ def plot_2d_points(x: npt.ArrayLike, ax: plt.Axes, labels: Union[npt.ArrayLike, 
                               markersize=10, alpha=0.6, label=f"class: {label}")
                    for label in unique_labels]
         return handles
-
 
 def plot_edges(points: npt.ArrayLike, edges: Tuple[List[int], List[int]],
                manifold: Manifold, ax: plt.Axes, handles: List[plt.Line2D]) -> None:
@@ -203,7 +200,6 @@ def plot_edges(points: npt.ArrayLike, edges: Tuple[List[int], List[int]],
         ax.plot(geodesic[:, 0], geodesic[:, 1], c='blue', alpha=0.6, zorder=2)
 
     handles.append(plt.Line2D([0], [0], color='blue', label='Geodesic'))
-
 
 def plot_hyperplane(hyperplanes: Tuple[npt.ArrayLike, npt.ArrayLike], manifold: Manifold,
                     ax: plt.Axes, handles: List[plt.Line2D]) -> None:
@@ -230,7 +226,6 @@ def plot_hyperplane(hyperplanes: Tuple[npt.ArrayLike, npt.ArrayLike], manifold: 
     handles.append(plt.Line2D([0], [0], color='green', label='Hyperplane'))
     handles.append(plt.Line2D([0], [0], color='green', marker='P', linestyle='',
                               markersize=10, label='Hyperplane Base Points'))
-
 
 def save_figure(fig: plt.Figure, file_name: str, file_path: Union[str, None]=None, format: str='png') -> None:
     """Save the figure to a file."""

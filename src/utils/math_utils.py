@@ -35,23 +35,41 @@ def sinh(x: torch.Tensor) -> torch.Tensor:
 def tanh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic tangent. Domain=(-inf, inf)."""
     eps = _get_tensor_eps(x)
-    clamp = float(-math.log(eps / 2) / 2)
+    clamp = float(math.log(2 / eps))
     return x.clamp(-clamp, clamp).tanh()
 
 @torch.jit.script
 def arcosh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic cosine. Domain=[1, inf)."""
-    min_val = 1.0 + _get_tensor_eps(x)
-    return x.clamp(min=min_val).double().add(torch.sqrt(x.clamp(min=min_val).double().pow(2) - 1)).log().to(x.dtype)
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    return x.clamp(1.0, clamp).acosh()
 
 @torch.jit.script
 def arsinh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic sine. Domain=(-inf, inf)."""
-    return x.double().add(torch.sqrt(1 + x.double().pow(2))).log().to(x.dtype)
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    return x.clamp(-clamp, clamp).asinh()
 
 @torch.jit.script
 def artanh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic tangent. Domain=(-1, 1)."""
     eps = _get_tensor_eps(x)
-    x = x.clamp(-1 + eps, 1 - eps)
-    return (torch.log1p(x.double()) - torch.log1p(-x.double())).mul(0.5).to(x.dtype)
+    return x.clamp(-1 + eps, 1 - eps).atanh()
+
+@torch.jit.script
+def smooth_clamp_min(x: torch.Tensor, min_value: float) -> torch.Tensor:
+    """Smoothly clamp tensor values to a minimum."""
+    eps = _get_tensor_eps(x)
+    shift = min_value + eps
+    x_clamped = shift + torch.nn.functional.softplus(x - shift, beta=100.0)
+    return torch.where(x < shift, x_clamped, x)
+
+@torch.jit.script
+def smooth_clamp_max(x: torch.Tensor, max_value: float) -> torch.Tensor:
+    """Smoothly clamp tensor values to a maximum."""
+    eps = _get_tensor_eps(x)
+    shift = max_value - eps
+    x_clamped = shift - torch.nn.functional.softplus(shift - x, beta=100.0)
+    return torch.where(x > shift, x_clamped, x)
