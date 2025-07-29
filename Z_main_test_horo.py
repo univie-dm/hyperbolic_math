@@ -1,13 +1,11 @@
-import torch
-import io
-import cProfile
-import pstats
-from src.utils.helpers import compute_pairwise_distances
-from src.utils.horo_pca import center_data, compute_frechet_mean, HoroPCA
-from src.manifolds import PoincareBall, Hyperboloid
-from icecream import ic
-from src.utils.horo_pca_chami import HoroChami
 import time
+import torch
+
+from icecream import ic
+from matplotlib import pyplot as plt
+from src.manifolds import PoincareBall
+from src.utils.helpers import compute_pairwise_distances
+from src.utils.horo_pca import HoroPCA
 
 
 if torch.cuda.is_available():
@@ -16,75 +14,81 @@ if torch.cuda.is_available():
 seeds = [*range(40, 41)]
 dtype = torch.float32
 curvature = 1.0
-input_dim = 32
-num_pts = 10_000
+input_dim = 2
+output_dim = 2
+num_pts = 1_000
 max_steps = 100
 #################################################
-manifold = PoincareBall(c=torch.tensor([curvature], dtype=dtype))
-hyperbol = Hyperboloid(c=torch.tensor([curvature], dtype=dtype))
-avg_distortion_ours = torch.tensor(0.0, dtype=dtype, device='cuda' if torch.cuda.is_available() else 'cpu')
-avg_distortion_chami = torch.tensor(0.0, dtype=dtype, device='cuda' if torch.cuda.is_available() else 'cpu')
-timing = 0.0
+poincare = PoincareBall(c=torch.tensor([curvature], dtype=dtype))
+avg_max_distortion = torch.tensor(0.0, dtype=dtype, device='cuda' if torch.cuda.is_available() else 'cpu')
+time_taken = 0.0
 for seed in seeds:
     torch.manual_seed(seed)
-    # Generate random data in Poincare ball
-    random_dirs = torch.normal(0, 1, size=(num_pts, input_dim), dtype=manifold.dtype, device=manifold.c.device)
+    # Generate random data in PoincareBall
+    random_dirs = torch.normal(0, 1, size=(num_pts, input_dim), dtype=poincare.dtype, device=poincare.c.device)
     random_dirs /= random_dirs.norm(p=2, dim=-1, keepdim=True)
-    random_radii = torch.rand((num_pts, 1), dtype=manifold.dtype).pow(1 / input_dim)
-    points = manifold.c**-0.5 * (random_dirs * random_radii) * 0.9
-    
-    # Compute the mean and center the data
-    frechet_mean, has_converged = compute_frechet_mean(points, manifold, eps=1e-07)
-    if not has_converged:
-        print(f"Frechet mean did not converge for seed {seed}. Using initial mean instead.")
-        frechet_mean = torch.mean(points, dim=0, keepdim=True)
-    x_centered = center_data(points, frechet_mean)
-
+    random_radii = torch.rand((num_pts, 1), dtype=poincare.dtype).pow(1 / input_dim)
+    points = poincare.c**-0.5 * (random_dirs * random_radii) * 0.9
     # Compute the original pairwise distances
-    dist_original = compute_pairwise_distances(x_centered, manifold)
-    dist_original += torch.eye(num_pts)
-
+    dist_original = compute_pairwise_distances(points, poincare) + torch.eye(num_pts)
+    poincare_closure = (1 / poincare.c.sqrt()).detach().cpu().numpy()
+    limit = (-1.1 * poincare_closure, 1.1 * poincare_closure)
     # Run dimensionality reduction methods
-    if True:
-        print("OURS")
-        start_time = time.time()
-        model_ours = HoroPCA(n_components=2, n_in_features=x_centered.shape[1], manifold=manifold, max_steps=500)
-        # Start profiling
-        pr = cProfile.Profile()
-        pr.enable()
-        model_ours.fit(x_centered)
-        ours_embeddings = model_ours.transform(x_centered)
-        # Create a StringIO object to capture the output
-        s = io.StringIO()
-        sortby = pstats.SortKey.CUMULATIVE
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        profiling_output = s.getvalue()
-        output_filename = "profile_fit_ours.txt"
-        with open(output_filename, "w") as f:
-            f.write(profiling_output)
-        end_time = time.time()
+    start_time = time.time()
+    horoPCA_model = HoroPCA(n_components=output_dim, n_in_features=points.shape[1], manifold=poincare, max_steps=max_steps)
+    horoPCA_model.fit(points)
+    embeddings = horoPCA_model.transform(points)
+    end_time = time.time()
+    time_taken += end_time - start_time
+    # Compute the pairwise distances of the dimensionality reduced data points
+    dist_embeddings = compute_pairwise_distances(embeddings, poincare) + torch.eye(num_pts)
+    max_distortion = torch.abs(dist_embeddings - dist_original) / dist_original
+    avg_max_distortion += torch.mean(max_distortion)
+    # Plot the dimensionality reduced data points
+    if input_dim == 2:
+        # Get the hyperplanes from the fitted model
+        principals = horoPCA_model.Q
+        principals_ortho, _ = torch.linalg.qr(principals.T, mode='reduced')
+        principals_ortho = principals_ortho.T / poincare.c.sqrt()
+        # Plot the original points
+        fig = plt.figure(figsize=(8, 8))
+        plt.title('Original data points')
+        plt.xlim(*limit)
+        plt.ylim(*limit)
+        circle = plt.Circle((0, 0), radius=poincare_closure, color='black', fill=False)
+        plt.gca().add_patch(circle)
+        plt.scatter(points[:, 0].detach().cpu().numpy(),
+                    points[:, 1].detach().cpu().numpy(),
+                    color='blue', label='x')
+        plt.quiver(-principals_ortho[0, 0].detach().cpu().numpy(),
+                   -principals_ortho[0, 1].detach().cpu().numpy(),
+                   2*principals_ortho[0, 0].detach().cpu().numpy(),
+                   2*principals_ortho[0, 1].detach().cpu().numpy(),
+                   angles='xy', scale_units='xy', scale=1,
+                   color='red', label='Principal Component 1')
+        plt.quiver(-principals_ortho[1, 0].detach().cpu().numpy(),
+                   -principals_ortho[1, 1].detach().cpu().numpy(),
+                   2*principals_ortho[1, 0].detach().cpu().numpy(),
+                   2*principals_ortho[1, 1].detach().cpu().numpy(),
+                   angles='xy', scale_units='xy', scale=1,
+                   color='green', label='Principal Component 2')
+        plt.legend(loc='upper right')
+        plt.grid()
+        plt.savefig('horoPCA_points.png')
+        plt.close()
+    if output_dim == 2:
+        # Plot the dimensionality reduced data points
+        fig = plt.figure(figsize=(8, 8))
+        plt.title('HoroPCA embedded data points')
+        plt.xlim(*limit)
+        plt.ylim(*limit)
+        circle = plt.Circle((0, 0), radius=poincare_closure, color='black', fill=False)
+        plt.gca().add_patch(circle)
+        plt.scatter(embeddings[:, 0].detach().cpu().numpy(), embeddings[:, 1].detach().cpu().numpy(), color='blue', label='x')
+        plt.legend(loc='upper right')
+        plt.grid(alpha=0.5)
+        plt.savefig('horoPCA_embeddings.png')
+        plt.close()
 
-        timing += end_time - start_time
-        ic(ours_embeddings.shape)
-        dist_ours = compute_pairwise_distances(ours_embeddings, manifold)
-        dist_ours += torch.eye(num_pts)
-        temp_ours = torch.abs(dist_ours - dist_original) / dist_original
-        avg_distortion_ours += torch.mean(temp_ours)
-    else:
-        print("CHAMI")
-        start_time = time.time()
-        model_chami = HoroChami(dim=x_centered.shape[1], n_components=2, lr=1e-3, max_steps=max_steps)
-        model_chami.fit(x_centered)
-        chami_embeddings = model_chami.map_to_ball(x_centered)
-        end_time = time.time()
-        timing += end_time - start_time
-        ic(chami_embeddings.shape)
-        dist_chami = compute_pairwise_distances(chami_embeddings, manifold)
-        dist_chami += torch.eye(num_pts)
-        temp_chami = torch.abs(dist_chami - dist_original) / dist_original
-        avg_distortion_chami += torch.mean(temp_chami)
-
-ic(avg_distortion_ours / len(seeds))
-ic(avg_distortion_chami / len(seeds))
-ic(f"{timing / len(seeds):.2f}")
+ic(avg_max_distortion / len(seeds))
+ic(f"{time_taken / len(seeds):.2f}")

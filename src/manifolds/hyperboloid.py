@@ -223,7 +223,7 @@ class Hyperboloid(Manifold):
         v, x = self._2manifold_dtype([v, x])
         v_norm = self._minkowski_norm(v, axis=axis)
         c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-        res = torch.cosh(c_norm_prod) * x + torch.sinh(c_norm_prod) / c_norm_prod * v
+        res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod * v
         if backproject:
             res = self.proj(res, axis=axis)
         return res
@@ -274,15 +274,10 @@ class Hyperboloid(Manifold):
         since artanh(z) ~ z for small z.
         """
         y, x = self._2manifold_dtype([y, x])
-        norm_arg = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
-        # Chami stability consideration
-        #clamped_xy = (self._minkowski_inner(x, y, axis=axis) + 1/self.c.sqrt()).clamp_max(-self.min_enorm) - 1/self.c.sqrt()
-        #norm_arg = y + self.c * clamped_xy * x
-        denom = self._minkowski_norm(norm_arg, axis=axis).clamp_min(self.min_enorm)
-        res = self.dist(x, y, axis=axis) * norm_arg / denom
-        # Chami stability consideration
-        # if backproject:
-        #     res = self.proj_tangent(res, axis=axis)
+        dist = self.dist(x, y, axis=axis)
+        num = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
+        denom = self._minkowski_norm(num, axis=axis)#.clamp_min(self.min_enorm)
+        res = num * dist / denom
         return res
 
     def logmap_0(self, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -322,20 +317,17 @@ class Hyperboloid(Manifold):
         return res
 
     def proj(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
-        x, sqrt_c_recipr = self._2manifold_dtype([x, 1 / self.c.sqrt()])
-        # Check if max_enorm can be numerically represented for the given c and eps
-        max_enorm = sqrt_c_recipr - self.max_enorm_eps
-        assert max_enorm < sqrt_c_recipr
-        x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-        proj_x = (max_enorm / x_norm) * x
-        res = torch.where(x_norm > max_enorm, proj_x, x)
+        x, = self._2manifold_dtype([x])
+        x_rem = x.narrow(axis, 1, x.shape[axis]-1)
+        x_rem_norm_sq = x_rem.pow(2).sum(dim=axis, keepdim=True)
+        x0 = (x_rem_norm_sq + 1 / self.c).sqrt()
+        res = torch.cat((x0, x_rem), dim=axis)
         return res
 
     def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:
         x, = self._2manifold_dtype([x])
-        x2 = x.pow(2).sum(dim=axis, keepdim=True)
-        r2 = torch.ones_like(x2) / self.c
-        res = torch.all(x2 < r2)
+        xBx = self._minkowski_inner(x, x, axis=axis)
+        res = torch.allclose(-1 / self.c, xBx, atol=1e-07)
         return res
 
     def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:

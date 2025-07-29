@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 
-from icecream import ic##
-from typing import Tuple
-from .math_utils import cosh, sinh
 from .helpers import compute_pairwise_distances
+from .math_utils import cosh, sinh
 from ..manifolds import Manifold, PoincareBall, Hyperboloid
 
 
@@ -17,6 +15,8 @@ class HoroPCA(nn.Module):
     ----------
     Ines Chami, et al. "Horopca: Hyperbolic dimensionality reduction via horospherical projections."
         International Conference on Machine Learning (2021).
+    Weize Chen, et al. "Fully hyperbolic neural networks."
+        arXiv preprint arXiv:2105.14686 (2021).
     """
     def __init__(
         self,
@@ -24,7 +24,7 @@ class HoroPCA(nn.Module):
         n_in_features: int,
         manifold: Manifold,
         lr: float = 1e-3,
-        max_steps: int = 100, # TODO: 500 params -- test these params - ic var_loss decrease
+        max_steps: int = 100,
     ):
         super().__init__()
         self.n_components = n_components
@@ -32,6 +32,7 @@ class HoroPCA(nn.Module):
         self.manifold = manifold
         self.lr = lr
         self.max_steps = max_steps
+        self.data_mean = None
         # Initialize the manifolds for horo projection and the principal components (ideal points)
         if isinstance(self.manifold, PoincareBall):
             self.hyperboloid = Hyperboloid(c=self.manifold.c, dtype=self.manifold.dtype)
@@ -62,23 +63,6 @@ class HoroPCA(nn.Module):
         res = torch.cat([torch.ones_like(ideals[:,:1]), ideals], dim=-1)
         return res
 
-    def _to_poincare_ideals(self, ideals: torch.Tensor) -> torch.Tensor:
-        """
-        Convert the Hyperboloid ideal point(s) to PoincareBall ideal point(s).
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Hyperboloid ideal point(s)
-
-        Returns
-        -------
-        res : torch.Tensor
-            The PoincareBall ideal point(s)
-        """
-        res = ideals[:,1:] / (ideals[:,:1] * self.manifold.c.sqrt())
-        return res
-
     def _horo_projection(self, x: torch.Tensor, Q: torch.Tensor) -> torch.Tensor:
         """
         Compute the horospherical projection(s) based on horosphere intersections in the Hyperboloid.
@@ -95,7 +79,7 @@ class HoroPCA(nn.Module):
 
         Returns
         -------
-        res : torch.Tensor
+        res : torch.Tensor (dtype=self.manifold.dtype)
             The horospherical projection(s) of x
         """
         # Compute the orthogonal geodesic projection [x B Q^T (Q B Q^T)^-1 Q] of x onto the geodesic
@@ -122,10 +106,83 @@ class HoroPCA(nn.Module):
         tangents = hyperboloid_origin - (origin_coeffs @ Q)
         # Assign the tangent vectors unit speed and map them to the Hyperboloid via the exponential map such
         # that the horospherical projection of x is at distance 'spine_dist' apart from the original point x
-        unit_tangents = tangents / self.hyperboloid._minkowski_norm(tangents).sqrt()
+        unit_tangents = tangents / self.hyperboloid._minkowski_inner(tangents, tangents).sqrt()
         cspine_dist = self.hyperboloid.dist(x, spine_proj) * self.hyperboloid.c.sqrt()
         res = cosh(cspine_dist) * spine_proj + sinh(cspine_dist) * unit_tangents / self.hyperboloid.c.sqrt()
+        res = self.hyperboloid.proj(res)
         return res
+
+    def _compute_frechet_mean(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the Frechet mean of the Hyperboloid point(s) x and save it as the data_mean attribute.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Hyperboloid point(s)
+        """
+        # Set the inital mean to be the centroid of the squared Lorentzian distance
+        # Note: This must not necessarily be a minimizer of the geodesic distance
+        x_sum = x.sum(dim=0, keepdim=True)
+        denom = (self.hyperboloid.c * torch.abs(self.hyperboloid._minkowski_inner(x_sum, x_sum))).sqrt()
+        mean_init = x_sum / denom
+        mean_init = self.hyperboloid.proj(mean_init)
+        has_converged = False
+        batch_size = x.shape[0]
+        # Try multiple learning rates
+        for lr in [1e-01, 2e-01, 5e-02, 4e-01, 2.5e-02]:
+            mean = mean_init
+            for _ in range(5_000):
+                # Compute the logarithmic map of x with respect to the current mean
+                log_x = torch.sum(self.hyperboloid.logmap(x, mean), dim=0, keepdim=True)
+                grad = log_x / batch_size
+                # Update the mean using the exponential map
+                mean = self.hyperboloid.expmap(lr * grad, mean)
+                if grad.norm(p=2, dim=-1, keepdim=False) < 5e-07:
+                    has_converged = True
+                    break
+            if has_converged:
+                break
+        else:
+            # If neither learning rate suceeded take the initial mean
+            print("_compute_frechet_mean: No convergence with any learning rate. "
+                  "Using initial mean.", flush=True)
+            mean = mean_init
+        self.data_mean = mean
+
+    def _center_data(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Center the data point(s) around their Frechet mean.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Hyperboloid point(s)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.manifold.dtype)
+            The centered Hyperboloid point(s)
+        """
+        # 1) Compute the Lorentz transformation that maps the mean to the Hyperboloid's origin
+        gamma = self.data_mean[:,:1] * self.hyperboloid.c.sqrt()
+        velocity = self.data_mean[:,1:] / self.data_mean[:,:1]
+        # Compute the individual blocks of the (transposed) transformation matrix
+        block_tl = gamma # top-left block: gamma (scalar)
+        block_tr = -gamma * velocity # top-right block: -gamma * v
+        top_row = torch.cat((block_tl, block_tr), dim=1)
+        block_bl = block_tr.T # bottom-left block: -gamma * v.T
+        identity_n = torch.eye(velocity.shape[1], dtype=x.dtype, device=x.device)
+        vTv = velocity.T @ velocity
+        coefficient = (gamma**2) / (1 + gamma)
+        block_br = identity_n + coefficient * vTv # bottom-right block: I + (gamma^2 / (1 + gamma)) * v.T v
+        bottom_row = torch.cat((block_bl, block_br), dim=1)
+        lorentz_boost = torch.cat((top_row, bottom_row), dim=0)
+        # 2) Apply the Lorentz transformation to the data
+        x = x @ lorentz_boost
+        # 3) Backproject the data to the Hyperboloid
+        x = self.hyperboloid.proj(x)
+        return x
 
     def compute_loss(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -138,7 +195,7 @@ class HoroPCA(nn.Module):
 
         Returns
         -------
-        -var : torch.Tensor
+        -var : torch.Tensor (dtype=self.manifold.dtype)
             The negative generalized variance of the projected point(s)
         """
         # Orthonormalize the principal components
@@ -165,6 +222,10 @@ class HoroPCA(nn.Module):
         assert self.manifold.is_in_manifold(x), "Input points must be in the manifold of the model."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
+        # Compute the Frechet mean of the data points
+        self._compute_frechet_mean(x)
+        # Center the data points around their Frechet mean
+        x = self._center_data(x)
         # The parameters of the model are ideal points that lie in the manifold's closure, i.e. they
         # are part of the Euclidean ambient space and do not lie in the hyperbolic space itself
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -176,7 +237,7 @@ class HoroPCA(nn.Module):
             torch.nn.utils.clip_grad_norm_(self.parameters(), 1e05)
             optim.step()
 
-    def transform(self, x: torch.Tensor) -> torch.Tensor:
+    def transform(self, x: torch.Tensor, recompute_mean: bool=False) -> torch.Tensor:
         """
         Project the point(s) x onto the submanifold containing the origin that is
         spanned by the generalized principal components of the PoincareBall.
@@ -185,6 +246,8 @@ class HoroPCA(nn.Module):
         ----------
         x : torch.Tensor
             Manifold point(s) of shape (n_samples, self.n_in_features)
+        recompute_mean : bool (optional)
+            If True, recompute the Frechet mean of the point(s) x (default: False)
 
         Returns
         -------
@@ -194,6 +257,10 @@ class HoroPCA(nn.Module):
         assert self.manifold.is_in_manifold(x), "Input points must be in the same manifold that was used during fit()."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
+        if recompute_mean or self.data_mean is None:
+            self._compute_frechet_mean(x)
+        # Center the data points around their Frechet mean
+        x = self._center_data(x)
         # Orthonormalize the principal components
         Q_ortho, _ = torch.linalg.qr(self.Q.T, mode='reduced')
         # Map the principal components to the null cone
@@ -202,91 +269,6 @@ class HoroPCA(nn.Module):
         x_proj = self._horo_projection(x, hyperboloid_ideals)
         # Map the projected points back to the PoincareBall
         x_poincare = self.hyperboloid.to_poincare(x_proj)
-        # Compute the coordinates in the lower-dimensional PoincareBall #TODO: check if this is correct or needs scaling
+        # Compute the coordinates in the lower-dimensional PoincareBall
         res = x_poincare @ Q_ortho
-        assert self.manifold.is_in_manifold(x_poincare), "Projected points must be in the manifold." ##TODO: remove after testing
         return res
-
-
-def compute_frechet_mean(x: torch.Tensor, manifold: Manifold, lr: float=1e-01,
-                         eps: float=1e-05, max_steps: int=5000) -> Tuple[torch.Tensor, bool]:
-    """
-    Compute the Frechet mean of manifold point(s) x using gradient descent.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Manifold point(s)
-    manifold : Manifold
-        The manifold on which the point(s) lie
-    lr : float (optional)
-        Learning rate for gradient descent (default: 1e-01)
-    eps : float (optional)
-        Tolerance for convergence (default: 1e-05)
-    max_steps : int (optional)
-        Maximum number of gradient descent steps (default: 5000)
-
-    Returns
-    -------
-    mean, has_converged : Tuple[torch.Tensor, bool]
-        Tuple containing the frechet mean and result of the convergence check
-
-    References
-    ----------
-    P. Thomas Fletcher, et al. "Principal geodesic analysis for the study of nonlinear statistics of shape."
-        IEEE transactions on medical imaging 23.8 (2004).
-    """
-    assert manifold.is_in_manifold(x), "Input points must be in the manifold."
-    batch_size = x.shape[0]
-    mean_init = torch.mean(x, dim=0, keepdim=True)
-    has_converged = False
-    # Try multiple learning rates
-    for lr in [lr, 2*lr, lr/2, 4*lr, lr/4]:
-        mean = mean_init
-        for _ in range(max_steps):
-            # Compute the logarithmic map of x with respect to the current mean
-            logx = torch.sum(manifold.logmap(x, mean), dim=0, keepdim=True)
-            delta_mean = lr / batch_size * logx
-            # Update the mean using the exponential map
-            mean = manifold.expmap(delta_mean, mean)
-            if delta_mean.norm(p=2, dim=-1, keepdim=False) < eps:
-                has_converged = True
-                break
-        if has_converged:
-            break
-    else:
-        # If neither learning rate suceeded return the initial mean
-        mean = mean_init
-    return mean, has_converged
-
-def center_data(x: torch.Tensor, mean: torch.Tensor) -> torch.Tensor:
-    """
-    #TODO: only works for curvature==1 as of now; adjust inversion
-    Center the data around the Frechet mean.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Manifold point(s)
-    mean : torch.Tensor
-        The Frechet mean of the manifold point(s)
-
-    Returns
-    -------
-    res : torch.Tensor
-        Centered manifold point(s)
-
-    References
-    ----------
-    P. Thomas Fletcher, et al. "Principal geodesic analysis for the study of nonlinear statistics of shape."
-        IEEE transactions on medical imaging 23.8 (2004).
-    """
-    # Compute the center of the inversion circle that maps the mean to the origin
-    center = mean / mean.pow(2).sum(dim=-1, keepdim=True)
-    # Apply the isometry that takes the mean to origin on x
-    r2 = center.pow(2).sum(dim=-1, keepdim=True) - 1.
-    u = x - center
-    u2 = u.pow(2).sum(dim=-1, keepdim=True)
-    res = r2 / u2 * u + center
-    return res
-
