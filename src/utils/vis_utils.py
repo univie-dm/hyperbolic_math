@@ -82,9 +82,9 @@ def create_figure(points: torch.Tensor,
     # Plot points in 2D
     points = points.detach()
     if isinstance(_manifold, PoincareBall) and points.shape[-1] > 2:
-        points = _manifold.to_hyperboloid(points)
+        points = poincare.to_hyperboloid(points)
         if hyperplanes is not None:
-            hyperplanes = (_manifold.to_hyperboloid(hyperplanes[0]), _manifold.to_hyperboloid(hyperplanes[1]))
+            hyperplanes = (poincare.to_hyperboloid(hyperplanes[0]), poincare.to_hyperboloid(hyperplanes[1]))
         points, hyperplanes = pointsTo2dPoincare(points, poincare, hyperplanes, settings)
         ax.set_title(f"{settings['title']} ({settings['dim_red_method']})")
     elif isinstance(_manifold, Hyperboloid) and points.shape[-1] > 3:
@@ -125,9 +125,9 @@ def pointsTo2dPoincare(x: torch.Tensor, poincare: PoincareBall,
     if settings['dim_red_method'] == 'HoroPCA':
         model = HoroPCA(n_components=2, n_in_features=x.shape[1], manifold=hyperboloid)
         model.fit(x)
-        x = model.transform(x)
+        x = model.transform(x).detach()
         if hyperplanes is not None:
-            hyperplanes = model.transform(hyperplanes)
+            hyperplanes = model.transform(hyperplanes).detach()
     elif settings['dim_red_method'] == 'tangent PCA':
         mean = compute_frechet_mean(x, hyperboloid)
         x = center_data(x, mean, hyperboloid)
@@ -147,7 +147,6 @@ def pointsTo2dPoincare(x: torch.Tensor, poincare: PoincareBall,
 
     if hyperplanes is not None:
         hyperplanes = (hyperplanes[:hyperplane_size].cpu().numpy(), hyperplanes[hyperplane_size:].cpu().numpy())
-
     points = x.cpu().numpy()
     return points, hyperplanes
 

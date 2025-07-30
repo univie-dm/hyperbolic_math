@@ -334,7 +334,7 @@ class Hyperboloid(Manifold):
         res = True
         return res
 
-    def to_poincare(self, x: torch.Tensor, ideal: bool=False, axis: int=-1) -> torch.Tensor:
+    def to_poincare(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         Map Hyperboloid point(s) x to the PoincareBall.
 
@@ -342,8 +342,6 @@ class Hyperboloid(Manifold):
         ----------
         x : torch.Tensor
             Hyperboloid point(s)
-        ideal : bool
-            Whether to convert x to ideal (=boundary) PoincareBall point(s) (default: False)
         axis : int
             Axis along which to compute the mapping (default: -1)
 
@@ -355,8 +353,5 @@ class Hyperboloid(Manifold):
         x, = self._2manifold_dtype([x])
         x0 = x.narrow(axis, 0, 1)
         x_rem = x.narrow(axis, 1, x.shape[axis]-1)
-        if ideal:
-            res = x_rem / (x0 * self.c.sqrt())
-        else:
-            res = x_rem / (1. + self.c.sqrt() * x0)
+        res = x_rem / (1. + self.c.sqrt() * x0)
         return res

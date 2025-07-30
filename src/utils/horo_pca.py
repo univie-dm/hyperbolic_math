@@ -16,6 +16,11 @@ def compute_frechet_mean(x: torch.Tensor, hyperboloid: Hyperboloid) -> torch.Ten
         Hyperboloid point(s)
     hyperboloid : Hyperboloid
         The Hyperboloid manifold
+
+    Returns
+    -------
+    mean : torch.Tensor (dtype=hyperboloid.dtype)
+        The Frechet mean
     """
     # Set the inital mean to be the centroid of the squared Lorentzian distance
     # Note: This must not necessarily be a minimizer of the geodesic distance
@@ -79,10 +84,10 @@ def center_data(x: torch.Tensor, mean: torch.Tensor, hyperboloid: Hyperboloid) -
     bottom_row = torch.cat((block_bl, block_br), dim=1)
     lorentz_boost = torch.cat((top_row, bottom_row), dim=0)
     # 2) Apply the Lorentz transformation to the data
-    x = x @ lorentz_boost
+    res = x @ lorentz_boost
     # 3) Backproject the data to the Hyperboloid
-    x = hyperboloid.proj(x)
-    return x
+    res = hyperboloid.proj(res)
+    return res
 
 class HoroPCA(nn.Module):
     """
@@ -114,10 +119,12 @@ class HoroPCA(nn.Module):
         # Initialize the manifolds for horo projection and the principal components (ideal points)
         if isinstance(self.manifold, PoincareBall):
             self.hyperboloid = Hyperboloid(c=self.manifold.c, dtype=self.manifold.dtype)
-            self.Q = nn.Parameter(torch.randn(self.n_components, self.n_in_features))
+            self.Q = nn.Parameter(torch.randn(self.n_components, self.n_in_features,
+                                              dtype=self.manifold.dtype, device=self.manifold.c.device))
         elif isinstance(self.manifold, Hyperboloid):
             self.hyperboloid = self.manifold
-            self.Q = nn.Parameter(torch.randn(self.n_components, self.n_in_features-1))
+            self.Q = nn.Parameter(torch.randn(self.n_components, self.n_in_features-1,
+                                              dtype=self.manifold.dtype, device=self.manifold.c.device))
         else:
             raise ValueError("Unsupported manifold type. Use PoincareBall or Hyperboloid.")
 
@@ -216,6 +223,7 @@ class HoroPCA(nn.Module):
         var = torch.mean(distances ** 2)
         return -var
 
+    @torch.enable_grad()
     def fit(self, x: torch.Tensor) -> None:
         """
         Find the principal component(s) using gradient-descent-based optimization.
@@ -231,14 +239,14 @@ class HoroPCA(nn.Module):
         # Compute the Frechet mean of the data points
         self.data_mean = compute_frechet_mean(x, self.hyperboloid)
         # Center the data points around their Frechet mean
-        x = center_data(x, self.data_mean, self.hyperboloid)
+        x_centered = center_data(x, self.data_mean, self.hyperboloid)
         # The parameters of the model are ideal points that lie in the manifold's closure, i.e. they
         # are part of the Euclidean ambient space and do not lie in the hyperbolic space itself
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
         # Iteratively compute the projected variance loss and update the parameters
         for _ in range(self.max_steps):
             optim.zero_grad()
-            loss = self.compute_loss(x)
+            loss = self.compute_loss(x_centered)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), 1e05)
             optim.step()
@@ -266,13 +274,13 @@ class HoroPCA(nn.Module):
         if recompute_mean or self.data_mean is None:
             self.data_mean = compute_frechet_mean(x, self.hyperboloid)
         # Center the data points around their Frechet mean
-        x = center_data(x, self.data_mean, self.hyperboloid)
+        x_centered = center_data(x, self.data_mean, self.hyperboloid)
         # Orthonormalize the principal components
         Q_ortho, _ = torch.linalg.qr(self.Q.T, mode='reduced')
         # Map the principal components to the null cone
         hyperboloid_ideals = self._to_hyperboloid_ideals(Q_ortho.T)
         # Project x onto the submanifold spanned by the Hyperboloid's principal components
-        x_proj = self._horo_projection(x, hyperboloid_ideals)
+        x_proj = self._horo_projection(x_centered, hyperboloid_ideals)
         # Map the projected points back to the PoincareBall
         x_poincare = self.hyperboloid.to_poincare(x_proj)
         # Compute the coordinates in the lower-dimensional PoincareBall
