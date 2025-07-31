@@ -326,8 +326,8 @@ class Hyperboloid(Manifold):
 
     def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:
         x, = self._2manifold_dtype([x])
-        xBx = self._minkowski_inner(x, x, axis=axis)
-        res = torch.allclose(-1 / self.c, xBx, atol=1e-07)
+        diff = self._minkowski_inner(x, x, axis=axis) + 1 / self.c
+        res = torch.allclose(diff, torch.zeros_like(diff), atol=1e-05)
         return res
 
     def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:

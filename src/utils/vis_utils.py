@@ -81,9 +81,10 @@ def create_figure(points: torch.Tensor,
     points = points.detach()
     assert _manifold.is_in_manifold(points), "Points are not in the manifold"
     if isinstance(_manifold, PoincareBall) and points.shape[-1] > 2:
-        points = poincare.to_hyperboloid(points)
+        points = to_hyperboloid_vis(points, poincare)
         if hyperplanes is not None:
-            hyperplanes = (poincare.to_hyperboloid(hyperplanes[0]), poincare.to_hyperboloid(hyperplanes[1]))
+            hyperplanes = (to_hyperboloid_vis(hyperplanes[0], poincare),
+                           to_hyperboloid_vis(hyperplanes[1], poincare))
         points, hyperplanes = pointsTo2dPoincare(points, poincare, hyperplanes, settings)
         ax.set_title(f"{settings['title']} ({settings['dim_red_method']})")
     elif isinstance(_manifold, Hyperboloid) and points.shape[-1] > 3:
@@ -112,17 +113,23 @@ def create_figure(points: torch.Tensor,
     else:
         return fig
 
+def to_hyperboloid_vis(x: torch.Tensor, poincare: PoincareBall) -> torch.Tensor:
+    """Project PoincareBall points to the Hyperboloid. Before projecting to the Hyperboloid,
+       we rescale the points to match the representational limitations between the PoincareBall
+       and the Hyperboloid."""
+    x = x / x.norm(p=2, dim=-1, keepdim=True) * 0.95
+    res = poincare.to_hyperboloid(x)
+    return res
+
 def pointsTo2dPoincare(x: torch.Tensor, poincare: PoincareBall,
                        hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None]=None,
                        settings: Union[dict, None]=None) -> Tuple[npt.ArrayLike, Union[npt.ArrayLike, None]]:
     """Project Hyperboloid points and Hyperboloid hyperplanes to the 2d PoincareBall using the specified method."""
     hyperboloid = Hyperboloid(c=poincare.c, dtype=poincare.dtype)
-    x = hyperboloid.proj(x)
 
     if hyperplanes is not None:
         hyperplane_size = hyperplanes[0].shape[0]
         hyperplanes = torch.cat((hyperplanes[0], hyperplanes[1]), dim=0)
-        hyperplanes = hyperboloid.proj(hyperplanes)
 
     if settings['dim_red_method'] == 'HoroPCA':
         model = HoroPCA(n_components=2, n_in_features=x.shape[1], manifold=hyperboloid)
