@@ -108,7 +108,7 @@ class Euclidean(Manifold):
         y : torch.Tensor
             Euclidean manifold point(s)
         axis : int
-            Axis along which to compute the distance (default: -1)
+            Axis along which to compute the geodesic distance (default: -1)
         backproject : bool (ignored)
             Whether to project results back to the Euclidean manifold (default: True)
         Note: Backproject is not used in the Euclidean manifold, but included for consistency with other manifolds.
@@ -131,7 +131,7 @@ class Euclidean(Manifold):
         x : torch.Tensor
             Euclidean manifold point(s)
         axis : int
-            Axis along which to compute the distance (default: -1)
+            Axis along which to compute the geodesic distance (default: -1)
 
         Returns
         -------

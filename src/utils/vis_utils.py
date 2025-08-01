@@ -1,4 +1,3 @@
-import copy
 import os
 import torch
 import numpy as np
@@ -6,10 +5,9 @@ import numpy.typing as npt
 
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 from typing import Dict, List, Tuple, Union
-from .helpers import compute_pairwise_distances
-from ..manifolds import Manifold, Hyperboloid
+from .horo_pca import HoroPCA, compute_frechet_mean, center_data
+from ..manifolds import Manifold, Hyperboloid, PoincareBall
 
 
 def create_figure(points: torch.Tensor,
@@ -39,7 +37,7 @@ def create_figure(points: torch.Tensor,
         Dictionary of settings for the visualization.
         If not provided, the following default settings are used:
         - "plot_manifold_dtype": torch.float64 (Data type for plotting)
-        - "dim_red_method": "tangent PCA" {"tangent PCA", "hyperbolic PCA", "tangent tSNE", "hyperbolic tSNE"} (Dimensionality reduction method)
+        - "dim_red_method": "tangent PCA" {"HoroPCA", "tangent PCA"} (Dimensionality reduction method)
         - "title": "Hyperbolic Embeddings" (Title of the plot)
         - "show_origin": True (Whether to show the origin)
         - "save_figure": False (Whether to save the figure or return it)
@@ -49,7 +47,7 @@ def create_figure(points: torch.Tensor,
     """
     default_settings = {
         "plot_manifold_dtype": torch.float64,
-        "dim_red_method": "tangent PCA",
+        "dim_red_method": "HoroPCA",
         "title": "Hyperbolic Embeddings",
         "show_origin": True,
         "save_figure": False,
@@ -62,18 +60,13 @@ def create_figure(points: torch.Tensor,
         default_settings.update(settings)
     settings = default_settings
 
-    # Create a copy of the manifold with curvature of the same type as 'plot_manifold_dtype'
+    # Create the PoincareBall with curvature of the same type as 'plot_manifold_dtype'
     # Default "plot_manifold_dtype" is double precision to avoid representational instabilities
-    manifold = copy.deepcopy(_manifold)
-    manifold.dtype = settings['plot_manifold_dtype']
-    manifold.c = manifold.c.to(manifold.dtype)
-
-    assert manifold.is_in_manifold(points), "Points are not in the manifold"
-    points = points.detach()
-    poincare_closure = 1 / manifold.c.sqrt().cpu().detach()
+    poincare = PoincareBall(c=_manifold.c.to(settings['plot_manifold_dtype']), dtype=settings['plot_manifold_dtype'])
 
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.set_aspect('equal')
+    poincare_closure = 1 / poincare.c.sqrt().cpu().detach()
     ax.set_xlim(-1.1 * poincare_closure, 1.1 * poincare_closure)
     ax.set_ylim(-1.1 * poincare_closure, 1.1 * poincare_closure)
 
@@ -84,89 +77,92 @@ def create_figure(points: torch.Tensor,
     if settings['show_origin']:
         ax.scatter(0, 0, marker='x', c='black', s=50, zorder=5)
 
-    if isinstance(manifold, Hyperboloid):
-        # TODO: Project manifold points onto PoincareBall first
-        raise NotImplementedError('Hyperboloid is not supported yet')
-
-    # Plot points in 2D
-    if points.shape[-1] > 2:
-        points, hyperplanes = pointsTo2d(points, manifold, hyperplanes, settings)
+    # Project points onto the 2d PoincareBall
+    points = points.detach()
+    assert _manifold.is_in_manifold(points), "Points are not in the manifold"
+    if isinstance(_manifold, PoincareBall) and points.shape[-1] > 2:
+        points = to_hyperboloid_vis(points, poincare)
+        if hyperplanes is not None:
+            hyperplanes = (to_hyperboloid_vis(hyperplanes[0], poincare),
+                           to_hyperboloid_vis(hyperplanes[1], poincare))
+        points, hyperplanes = pointsTo2dPoincare(points, poincare, hyperplanes, settings)
         ax.set_title(f"{settings['title']} ({settings['dim_red_method']})")
-        # TODO: For hyperbolic methods some results are no longer on the manifold
-        #assert manifold.is_in_manifold(torch.from_numpy(points)), "Points are not in the manifold"
+    elif isinstance(_manifold, Hyperboloid) and points.shape[-1] > 3:
+        points, hyperplanes = pointsTo2dPoincare(points, poincare, hyperplanes, settings)
+        ax.set_title(f"{settings['title']} ({settings['dim_red_method']})")
     else:
-        points = points.cpu().numpy()
-        hyperplanes = (hyperplanes[0].numpy(), hyperplanes[1].numpy()) if hyperplanes is not None else None
+        hyperplanes = (hyperplanes[0], hyperplanes[1]) if hyperplanes is not None else None
         ax.set_title(f"{settings['title']}")
+
+    # Plot the points in 2D
     handles = plot_2d_points(points, ax, labels)
 
     # Plot geodesics between specified points
     if edges is not None:
-        if settings['dim_red_method'] in ['tangent tSNE', 'hyperbolic tSNE']:
-            # tSNE for edges skews the resulting projection way too much
-            # since we sample many points along geodesics
-            raise NotImplementedError('tSNE for edges oversamples geodesics')
-        plot_edges(points, edges, manifold, ax, handles)
+        plot_edges(points, edges, poincare, ax, handles)
 
     # Plot hyperplanes
     if hyperplanes is not None:
-        plot_hyperplane(hyperplanes, manifold, ax, handles)
+        plot_hyperplane(hyperplanes, poincare, ax, handles)
 
     if handles:
-        ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
 
     if settings['save_figure']:
         save_figure(fig, settings['file_name'], file_path=settings['file_path'], format=settings['file_format'])
     else:
         return fig
 
+def to_hyperboloid_vis(x: torch.Tensor, poincare: PoincareBall) -> torch.Tensor:
+    """Project PoincareBall points to the Hyperboloid. Before projecting to the Hyperboloid,
+       we rescale the points to match the representational limitations between the PoincareBall
+       and the Hyperboloid."""
+    x = x * 0.95
+    res = poincare.to_hyperboloid(x)
+    return res
 
-def pointsTo2d(x: torch.Tensor, manifold: Manifold,
-               hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None],
-               settings: dict) -> Tuple[npt.ArrayLike, Union[npt.ArrayLike, None]]:
-    """Project points and hyperplanes to 2d using the specified method."""
-    sample_size = x.shape[0]
+def pointsTo2dPoincare(x: torch.Tensor, poincare: PoincareBall,
+                       hyperplanes: Union[Tuple[torch.Tensor, torch.Tensor], None]=None,
+                       settings: Union[dict, None]=None) -> Tuple[npt.ArrayLike, Union[npt.ArrayLike, None]]:
+    """Project Hyperboloid points and Hyperboloid hyperplanes to the 2d PoincareBall using the specified method."""
+    hyperboloid = Hyperboloid(c=poincare.c, dtype=poincare.dtype)
 
     if hyperplanes is not None:
         hyperplane_size = hyperplanes[0].shape[0]
-        x = torch.cat((x, hyperplanes[0], hyperplanes[1]), dim=0)
+        hyperplanes = torch.cat((hyperplanes[0], hyperplanes[1]), dim=0)
 
-    if settings['dim_red_method'] == 'tangent tSNE':
-        # tSNE projected points are all pushed to the boundary
-        # TODO: Implement proper tSNE with adjusted hyperbolic distr. (CO-SNE)
-        x = manifold.logmap_0(x).cpu()
-        x = TSNE(n_components=2, init='random').fit_transform(x)
-        x = manifold.expmap_0(torch.from_numpy(x).to(manifold.c.device))
-    elif settings['dim_red_method'] == 'hyperbolic tSNE':
-        # tSNE like this in the hyperbolic space does not make any sense
-        # -> Almost all projected points are no longer on the manifold
-        pairwise_dists = compute_pairwise_distances(x, manifold).cpu()
-        x = TSNE(n_components=2, metric='precomputed', init='random').fit_transform(pairwise_dists)
+    if settings['dim_red_method'] == 'HoroPCA':
+        model = HoroPCA(n_components=2, n_in_features=x.shape[1], manifold=hyperboloid)
+        model.fit(x)
+        x = model.transform(x).detach()
+        if hyperplanes is not None:
+            hyperplanes = model.transform(hyperplanes).detach()
     elif settings['dim_red_method'] == 'tangent PCA':
-        x = manifold.logmap_0(x).cpu()
-        model = PCA(n_components=2).fit(x[:sample_size])
-        x = model.transform(x)
-        x = manifold.expmap_0(torch.from_numpy(x).to(manifold.c.device))
-    elif settings['dim_red_method'] == 'hyperbolic PCA':
-        model = PCA(n_components=2).fit(x[:sample_size].cpu())
-        x = model.transform(x)
+        mean = compute_frechet_mean(x, hyperboloid)
+        x = center_data(x, mean, hyperboloid)
+        x = hyperboloid.to_poincare(x)
+        x_tangent = poincare.logmap_0(x).cpu()
+        model = PCA(n_components=2).fit(x_tangent)
+        x_tangent = torch.from_numpy(model.transform(x_tangent))
+        x = poincare.expmap_0(x_tangent.to(poincare.c.device))
+        if hyperplanes is not None:
+            hyperplanes = center_data(hyperplanes, mean, hyperboloid)
+            hyperplanes = hyperboloid.to_poincare(hyperplanes)
+            hyperplanes_tangent = poincare.logmap_0(hyperplanes).cpu()
+            hyperplanes_tangent = torch.from_numpy(model.transform(hyperplanes_tangent))
+            hyperplanes = poincare.expmap_0(hyperplanes_tangent.to(poincare.c.device))
     else:
         raise ValueError(f"Unknown dimensionality reduction method {settings['dim_red_method']}")
 
     if hyperplanes is not None:
-        points = x[:sample_size].cpu().numpy()
-        hyperplanes = (x[sample_size:sample_size + hyperplane_size].cpu().numpy(),
-                       x[sample_size + hyperplane_size:].cpu().numpy())
-    else:
-        points = x.cpu().numpy()
+        hyperplanes = (hyperplanes[:hyperplane_size], hyperplanes[hyperplane_size:])
+    return x, hyperplanes
 
-    return points, hyperplanes
-
-
-def plot_2d_points(x: npt.ArrayLike, ax: plt.Axes, labels: Union[npt.ArrayLike, None]=None) -> List[plt.Line2D]:
+def plot_2d_points(x: torch.Tensor, ax: plt.Axes, labels: Union[npt.ArrayLike, None]=None) -> List[plt.Line2D]:
     """Plot 2d PoincareBall points with labels (optional)."""
+    x = x.cpu()
     if labels is None:
-        ax.scatter(x[:, 0], x[:, 1], c='blue', alpha=0.6, zorder=4)
+        ax.scatter(x[:, 0], x[:, 1], c='blue', alpha=0.6, zorder=2)
         return []
     else:
         assert x.shape[0] == len(labels), "Number of labels must match number of points"
@@ -174,63 +170,46 @@ def plot_2d_points(x: npt.ArrayLike, ax: plt.Axes, labels: Union[npt.ArrayLike, 
         cmap = plt.cm.tab10 if len(unique_labels) <= 10 else plt.cm.tab20
         colors = cmap(np.linspace(0, 1, len(unique_labels)))
         color_map = dict(zip(unique_labels, colors))
-
-        ax.scatter(x[:, 0], x[:, 1], c=[color_map[label] for label in labels], alpha=0.6, zorder=3)
-
+        ax.scatter(x[:, 0], x[:, 1], c=[color_map[label] for label in labels], alpha=0.6, zorder=2)
         handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color_map[label],
-                              markersize=10, alpha=0.6, label=f"class: {label}")
+                              markersize=10, alpha=0.6, label=f"{label}")
                    for label in unique_labels]
         return handles
 
-
-def plot_edges(points: npt.ArrayLike, edges: Tuple[List[int], List[int]],
-               manifold: Manifold, ax: plt.Axes, handles: List[plt.Line2D]) -> None:
+def plot_edges(points: torch.Tensor, edges: Tuple[List[int], List[int]],
+               poincare: PoincareBall, ax: plt.Axes, handles: List[plt.Line2D]) -> None:
     """Plot geodesic segment(s) connecting x and y."""
     assert len(edges[0]) == len(edges[0]), "Start and end points must have the same shape"
-
     spacing = 100
-    device = manifold.c.device
-    t = torch.linspace(0, 1.0, spacing, device=device).reshape(-1, 1)
-    x = torch.from_numpy(points[edges[0]]).to(device)
-    y = torch.from_numpy(points[edges[1]]).to(device)
-    dir = manifold.addition(-x, y, backproject=True)
-
+    t = torch.linspace(0, 1.0, spacing, device=poincare.c.device).reshape(-1, 1)
+    x = points[edges[0]]
+    y = points[edges[1]]
+    dir = poincare.addition(-x, y)
     for _x, _dir in zip(x, dir):
         # Compute points on the geodesic segment connecting x and y
-        second_term = manifold.scalar_mul(t, _dir.repeat(spacing, 1), backproject=True)
-        geodesic = manifold.addition(_x.repeat(spacing, 1), second_term, backproject=True)
-        geodesic = geodesic.cpu().detach()
-        ax.plot(geodesic[:, 0], geodesic[:, 1], c='blue', alpha=0.6, zorder=2)
+        second_term = poincare.scalar_mul(t, _dir.repeat(spacing, 1), backproject=True)
+        geodesic = poincare.addition(_x.repeat(spacing, 1), second_term, backproject=True)
+        geodesic = geodesic.cpu()
+        ax.plot(geodesic[:, 0], geodesic[:, 1], c='dimgrey', zorder=3, linewidth=1.5)
+    handles.append(plt.Line2D([0], [0], color='dimgrey', label='Geodesic'))
 
-    handles.append(plt.Line2D([0], [0], color='blue', label='Geodesic'))
-
-
-def plot_hyperplane(hyperplanes: Tuple[npt.ArrayLike, npt.ArrayLike], manifold: Manifold,
+def plot_hyperplane(hyperplanes: Tuple[torch.Tensor, torch.Tensor], poincare: PoincareBall,
                     ax: plt.Axes, handles: List[plt.Line2D]) -> None:
     """Plot hyperplane(s) and their base point(s)."""
     hyperplane_normals, hyperplane_base_points = hyperplanes
     hyperplane_normals = hyperplane_normals.reshape(-1, 2)
     hyperplane_base_points = hyperplane_base_points.reshape(-1, 2)
-
     hyperplane_normals[:, 0] = -hyperplane_normals[:, 0]
-    hyperplane_dirs = hyperplane_normals[:, ::-1].copy()
-
+    hyperplane_dirs = hyperplane_normals[:, ::-1]
     spacing = 10_000
-    device = manifold.c.device
-    t = torch.linspace(-500, 500, spacing, device=device)
-    hyperplane_base_points = torch.from_numpy(hyperplane_base_points).to(device)
-    hyperplane_dirs = torch.from_numpy(hyperplane_dirs).to(device)
-
+    t = torch.linspace(-500, 500, spacing, device=poincare.c.device)
     for _base, _dir in zip(hyperplane_base_points, hyperplane_dirs):
-        points = manifold.expmap(torch.outer(t, _dir), _base.repeat(spacing, 1)).cpu().detach()
+        points = poincare.expmap(torch.outer(t, _dir), _base.repeat(spacing, 1)).cpu()
         ax.plot(points[:, 0], points[:, 1], c='green', alpha=0.6, zorder=3)
-
     ax.scatter(hyperplane_base_points[:, 0], hyperplane_base_points[:, 1], c='green', marker='P', s=50, zorder=4)
-
     handles.append(plt.Line2D([0], [0], color='green', label='Hyperplane'))
     handles.append(plt.Line2D([0], [0], color='green', marker='P', linestyle='',
                               markersize=10, label='Hyperplane Base Points'))
-
 
 def save_figure(fig: plt.Figure, file_name: str, file_path: Union[str, None]=None, format: str='png') -> None:
     """Save the figure to a file."""
