@@ -156,10 +156,11 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
         x, y = self._2manifold_dtype([x, y])
-        res = arcosh(smooth_clamp_min(-self.c * self._minkowski_inner(x, y, axis=axis), 1.)) / self.c.sqrt()
+        res = arcosh(-self.c * self._minkowski_inner(x, y, axis=axis)) / self.c.sqrt()
         return res
 
     def dist_0(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -180,14 +181,12 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
         x, = self._2manifold_dtype([x])
-        if axis < 0:
-            axis = x.dim() + axis
-        slicing = [slice(None)] * x.dim()
-        slicing[axis] = slice(0, 1)
-        res = torch.acosh((self.c.sqrt() * x[tuple(slicing)]).clamp_min(1.)) / self.c.sqrt()
+        x0 = x.narrow(axis, 0, 1)
+        res = arcosh(self.c.sqrt() * x0) / self.c.sqrt()
         return res
 
     def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
@@ -252,9 +251,9 @@ class Hyperboloid(Manifold):
         Parameters
         ----------
         y : torch.Tensor
-            PoincareBall point(s)
+            Hyperboloid point(s)
         x : torch.Tensor
-            PoincareBall point(s)
+            Hyperboloid point(s)
         axis : int
             Axis along which to compute the logarithmic map (default: -1)
 
@@ -288,35 +287,201 @@ class Hyperboloid(Manifold):
         return res
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Parallel transport tangent vector(s) v from the tangent space(s) of
+        Hyperboloid point(s) x to the tangent space(s) of Hyperboloid point(s) y.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s) in the tangent space(s) of x
+        x : torch.Tensor
+            Hyperboloid point(s)
+        y : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the parallel transport (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The parallel transported tangent vector(s)
+
+        References
+        ----------
+        #TODO: version FHNN is 1) and version else is 2)
+        Aaron Lou, et al. "Differentiating through the fréchet mean."
+            International conference on machine learning (2020).
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        # TODO: check which version is correct
         v, x, y = self._2manifold_dtype([v, x, y])
-        conformal_frac = self._lambda(x, axis=axis) / self._lambda(y, axis=axis)
-        res = conformal_frac * self._gyration(y, -x, v, axis=axis)
+        vy = self._minkowski_inner(v, y, axis=axis)
+        xy = self._minkowski_inner(x, y, axis=axis)
+        denom = 1 / self.c - xy
+        scale = vy / denom
+        res = v + scale * (x + y)
         return res
 
     def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Parallel transport tangent vector(s) v from the tangent space of the
+        Hyperboloid origin to the tangent space(s) of Hyperboloid point(s) y.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s) in the tangent space of the Hyperboloid origin
+        y : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the parallel transport (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The parallel transported tangent vector(s)
+
+        References
+        ----------
+        #TODO: version FHNN is 1) and version else is 2)
+        Aaron Lou, et al. "Differentiating through the fréchet mean."
+            International conference on machine learning (2020).
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        # TODO: check which version is correct
         v, y = self._2manifold_dtype([v, y])
-        conformal_frac = 2 / self._lambda(y, axis=axis)
-        res = conformal_frac * v
+        origin = torch.zeros_like(y, dtype=self.dtype)
+        if axis < 0:
+            axis = y.dim() + axis
+        slicing = [slice(None)] * y.dim()
+        slicing[axis] = slice(0, 1)
+        origin[tuple(slicing)] = 1 / self.c.sqrt()
+        vy = self._minkowski_inner(v, y, axis=axis)
+        y0 = y.narrow(axis, 0, 1)
+        denom = 1 / self.c + y0 / self.c.sqrt()
+        scale = vy / denom
+        res = v + scale * (y + origin)
         return res
 
     def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
-        u, v, x = self._2manifold_dtype([u, v, x])
-        res = (u * v).sum(dim=axis, keepdim=True) * self._lambda(x, axis=axis) ** 2
+        """
+        Compute the inner product(s) between tangent vectors u and v of the tangent space(s)
+        at Hyperboloid point(s) x with respect to the Riemannian metric of the Hyperboloid.
+
+        Parameters
+        ----------
+        u : torch.Tensor
+            Vector(s) in the tangent space(s) of x
+        v : torch.Tensor
+            Vector(s) in the tangent space(s) of x
+        x : torch.Tensor (ignored)
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the tangent inner product (default: -1)
+        Note: x is not used since the tangent inner product is just the restriction of the
+              minkowski inner product to the tangent space with respect to x, but included
+              for consistency with other manifolds.
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The tangent inner product(s) of u and v
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        u, v = self._2manifold_dtype([u, v])
+        res = self._minkowski_inner(u, v, axis=axis)
         return res
 
     def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
-        v, x = self._2manifold_dtype([v, x])
-        res = self._lambda(x, axis=axis) * v.norm(p=2, dim=axis, keepdim=True)
+        """
+        Compute the norm(s) of tangent vector(s) v of the tangent space(s) at Hyperboloid
+        point(s) x with respect to the Riemannian metric of the Hyperboloid.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s) in the tangent space(s) of x
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the tangent norm (default: -1)
+        Note: x is not used since the tangent norm is just the restriction of the
+              minkowski norm to the tangent space with respect to x, but included
+              for consistency with other manifolds.
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The tangent norm(s) of v
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        v, = self._2manifold_dtype([v])
+        res = self._minkowski_norm(v, axis=axis)
         return res
 
     def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
-        # Compute the conformal factor in the manifold's precision and cast it to the gradient's precision
+        """
+        Compute the Riemannian gradient(s) at Hyperboloid point(s) x from the Euclidean gradient(s).
+
+        Parameters
+        ----------
+        grad : torch.Tensor
+            Euclidean gradient(s)
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the Riemannian gradient (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor
+            The Riemannian gradient(s) at x
+
+        References
+        ----------
+        Maximillian Nickel, Douwe Kiela. "Learning continuous hierarchies in the lorentz model of hyperbolic geometry."
+            International conference on machine learning. PMLR, 2018.
+        """
+        # Compute the orthogonal projection of the gradient onto the tangent space of x
+        # in the manifold's precision and cast it to the gradient's precision
         x, = self._2manifold_dtype([x])
-        conformal_scale = (self._lambda(x, axis=axis) ** 2).to(grad.dtype)
-        res = grad / conformal_scale
+        normal = (-self.c * self._minkowski_inner(x, grad, axis=axis) * x).to(grad.dtype)
+        res = grad - normal
         return res
 
     def proj(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Project point(s) x onto the Hyperboloid by scaling the time component(s) x0 of
+        x such that the minkowski inner product of x with itself is equal to -1/c.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Point(s)
+        axis : int
+            Axis along which to compute the projection (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The projected Hyperboloid point(s)
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
         x, = self._2manifold_dtype([x])
         x_rem = x.narrow(axis, 1, x.shape[axis]-1)
         x_rem_norm_sq = x_rem.pow(2).sum(dim=axis, keepdim=True)
@@ -325,13 +490,45 @@ class Hyperboloid(Manifold):
         return res
 
     def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:
+        """
+        Check if point(s) x lie on the Hyperboloid.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to check if x lies in the Hyperboloid (default: -1)
+
+        Returns
+        -------
+        res : bool
+            True if all points x lie in the Hyperboloid, False otherwise
+        """
         x, = self._2manifold_dtype([x])
-        diff = self._minkowski_inner(x, x, axis=axis) + 1 / self.c
-        res = torch.allclose(diff, torch.zeros_like(diff), atol=1e-05)
+        res = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=5e-04)
         return res
 
     def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:
-        res = True
+        """
+        Check if vector(s) v belong to the tangent space(s) at Hyperboloid point(s) x.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s)
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to check if v belong to the tangent space (default: -1)
+
+        Returns
+        -------
+        res : bool
+            True if all vectors v belong to their tangent spaces, False otherwise
+        """
+        v, x = self._2manifold_dtype([v, x])
+        res = torch.all(torch.abs(self._minkowski_inner(v, x, axis=axis)) < 1e-03)
         return res
 
     def to_poincare(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:

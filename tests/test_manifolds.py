@@ -147,8 +147,11 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     # Triangle inequality
     assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z) + atol)
     # Consistency of dist with dist_0
+    origin = torch.zeros_like(uniform_points)
+    if isinstance(manifold, Hyperboloid):
+        origin[:,0] = 1 / manifold.c.sqrt()
     torch.testing.assert_close(
-        manifold.dist(uniform_points, torch.zeros_like(uniform_points)),
+        manifold.dist(uniform_points, origin),
         manifold.dist_0(uniform_points),
         atol=atol,
         rtol=rtol
@@ -202,17 +205,18 @@ def test_ptransp(manifold: Manifold, tolerance: Tuple[float, float],
                  uniform_points: torch.Tensor) -> None:
     """Test the ptransp and ptransp_0 operations."""
     atol, rtol = tolerance
+    # Large tangent vectors can lead to numerical instability
+    # -> Riemannian metric may not be preserved when parallel transporting
+    bound = 200
+    u = torch.empty_like(uniform_points).uniform_(-bound, bound)
+    v = torch.empty_like(uniform_points).uniform_(-bound, bound)
+    origin = torch.zeros_like(v)
+    if isinstance(manifold, Hyperboloid):
+        origin[:,0] = 1 / manifold.c.sqrt()
+        # Project the candidate tangent vectors onto the tangent space at the Hyperboloid origin
+        v[:,0] = 0
+        u[:,0] = 0
     # Preservation of local geometry under parallel transport
-    if isinstance(manifold, (Euclidean, PoincareBall)):
-        # Large tangent vectors can lead to numerical instability
-        # -> Riemannian metric may not be preserved when parallel transporting
-        bound = 200
-        u = torch.empty_like(uniform_points).uniform_(-bound, bound)
-        v = torch.empty_like(uniform_points).uniform_(-bound, bound)
-        origin = torch.zeros_like(v)
-    else:   # Hyperboloid
-        # TODO: Generate tangent vectors at the origin for the Hyperboloid
-        pytest.skip()
     assert manifold.is_in_tangent_space(u, origin)
     assert manifold.is_in_tangent_space(v, origin)
     u_pt = manifold.ptransp_0(u, uniform_points)
@@ -253,9 +257,12 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
         atol=atol,
         rtol=rtol
     )
+    origin = torch.zeros_like(uniform_points)
+    if isinstance(manifold, Hyperboloid):
+        origin[:,0] = 1 / manifold.c.sqrt()
     torch.testing.assert_close(
         manifold.dist_0(uniform_points),
-        manifold.tangent_norm(manifold.logmap_0(uniform_points), torch.zeros_like(uniform_points)),
+        manifold.tangent_norm(manifold.logmap_0(uniform_points), origin),
         atol=atol,
         rtol=rtol
     )
