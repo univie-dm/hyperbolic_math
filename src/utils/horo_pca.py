@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .helpers import compute_pairwise_distances
-from .math_utils import cosh, sinh
+from .helpers import compute_smoothed_pairwise_distances
 from ..manifolds import Manifold, PoincareBall, Hyperboloid
 
 
@@ -179,8 +178,8 @@ class HoroPCA(nn.Module):
         x_coeffs = xBQt @ QBQt_inverse
         # 2) Compute the orthogonal geodesic projection onto the spine
         mink_proj = x_coeffs @ Q
-        mink_proj_norm = (-self.hyperboloid.c * self.hyperboloid._minkowski_inner(mink_proj, mink_proj)).sqrt()
-        spine_proj = mink_proj / mink_proj_norm
+        mink_proj_normalized = (-self.hyperboloid.c * self.hyperboloid._minkowski_inner(mink_proj, mink_proj)).sqrt()
+        spine_proj = mink_proj / mink_proj_normalized
         # Compute the tangent vectors of the hyperboloid with base point spine_proj that are pointing
         # towards hyperboloid_origin, are tangent to the target submanifold, and are orthogonal to the spine
         # Note: We orthogonalize the origin to the spine instead of the chords to save compute
@@ -189,12 +188,11 @@ class HoroPCA(nn.Module):
         originBQt = self.hyperboloid._minkowski_inner(hyperboloid_origin.unsqueeze(-1), Q.T.unsqueeze(0), axis=1).squeeze(1)
         origin_coeffs = originBQt @ QBQt_inverse
         tangents = hyperboloid_origin - (origin_coeffs @ Q)
-        # Assign the tangent vectors unit speed and map them to the Hyperboloid via the exponential map such
-        # that the horospherical projection of x is at distance 'spine_dist' apart from the original point x
+        # Assign the tangent vectors the correct speed such that by mapping them to the Hyperboloid via the exponential map
+        # the horospherical projection of x is at distance 'spine_dist' apart from the original point x
         unit_tangents = tangents / self.hyperboloid._minkowski_inner(tangents, tangents).sqrt()
-        cspine_dist = self.hyperboloid.dist(x, spine_proj) * self.hyperboloid.c.sqrt()
-        res = cosh(cspine_dist) * spine_proj + sinh(cspine_dist) * unit_tangents / self.hyperboloid.c.sqrt()
-        res = self.hyperboloid.proj(res)
+        tangents = self.hyperboloid.dist(x, spine_proj) * unit_tangents
+        res = self.hyperboloid.expmap(tangents, spine_proj)
         return res
 
     def compute_loss(self, x: torch.Tensor) -> torch.Tensor:
@@ -218,7 +216,7 @@ class HoroPCA(nn.Module):
         # Project x onto the submanifold spanned by the Hyperboloid's principal components
         x_proj = self._horo_projection(x, hyperboloid_ideals)
         # Compute the pairwise distances directly in the Hyperboloid
-        distances = compute_pairwise_distances(x_proj, self.hyperboloid)
+        distances = compute_smoothed_pairwise_distances(x_proj, self.hyperboloid)
         # Compute the biased generalized variance of the projected points
         var = torch.mean(distances ** 2)
         return -var

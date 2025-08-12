@@ -497,8 +497,8 @@ class PoincareBall(Manifold):
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
-        Parallel transport tangent vector(s) v from the tangent space(s) of PoincareBall point(s) x
-        to the tangent space(s) of PoincareBall point(s) y.
+        Parallel transport tangent vector(s) v from the tangent space(s) of
+        PoincareBall point(s) x to the tangent space(s) of PoincareBall point(s) y.
         [Mobius version]
 
         Parameters
@@ -728,7 +728,7 @@ class PoincareBall(Manifold):
             PoincareBall point(s)
         axis : int
             Axis along which to check if v belong to the tangent space (default: -1)
-        Note: The dimension is not used in the PoincareBall, but it is included for consistency with other manifolds.
+        Note: The tangent space of x spans the entire ambient space of the PoincareBall.
 
         Returns
         -------

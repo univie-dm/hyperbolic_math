@@ -1,8 +1,9 @@
+import math
 import torch
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, cosh, sinh, smooth_clamp_min
+from ..utils.math_utils import arcosh, cosh, sinh, smooth_clamp_min, smooth_clamp_max, smooth_clamp
 
 
 class Hyperboloid(Manifold):
@@ -24,11 +25,9 @@ class Hyperboloid(Manifold):
         if dtype == "float32" or dtype == torch.float32:
             self.dtype = torch.float32
             self.min_enorm = 1e-15
-            #self.max_enorm_eps = 5e-06
         elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
             self.min_enorm = 1e-15
-            #self.max_enorm_eps = 1e-08
         else:
             raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32 and float64.")
 
@@ -63,9 +62,9 @@ class Hyperboloid(Manifold):
         Parameters
         ----------
         x : torch.Tensor
-            Ambient space/Hyperboloid point(s)
+            Point(s)
         y : torch.Tensor
-            Ambient space/Hyperboloid point(s)
+            Point(s)
         axis : int
             Axis along which to compute the Minkowski inner product (default: -1)
 
@@ -76,7 +75,8 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
         x, y = self._2manifold_dtype([x, y])
         xy_prod = x * y
@@ -92,7 +92,7 @@ class Hyperboloid(Manifold):
         Parameters
         ----------
         x : torch.Tensor
-            Ambient space/Hyperboloid point(s)
+            Point(s)
         axis : int
             Axis along which to compute the Minkowski norm (default: -1)
 
@@ -103,10 +103,11 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
         x, = self._2manifold_dtype([x])
-        res = (self._minkowski_inner(x, x, axis=axis)).clamp_min(0.).sqrt()
+        res = self._minkowski_inner(x, x, axis=axis).clamp_min(0.).sqrt() # TODO: smooth clamp??
         return res
 
     def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
@@ -189,7 +190,8 @@ class Hyperboloid(Manifold):
         res = arcosh(self.c.sqrt() * x0) / self.c.sqrt()
         return res
 
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True,
+               version: str="normal") -> torch.Tensor:
         """
         Map tangent vector(s) v at Hyperboloid point(s) x to the Hyperboloid.
         [Exponential map]
@@ -212,31 +214,105 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
-
-        Stability
-        ---------
-        expmap converges towards the addition x+v as the minkowski norm of v and/or c approaches zero,
-        since torch.cosh(z) ~ 1, and sinh(z) ~ 0 for small z.
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
         v, x = self._2manifold_dtype([v, x])
-        v_norm = self._minkowski_norm(v, axis=axis)
-        c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-        res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod * v
+        # TODO: check if Taylor expansion has any advantages in real world applications
+        if version[:-2] == "Taylor": # e.g. "Taylor 4" for degree 4 approx.
+            degree = int(version[-1])
+            scale = self.c * self._minkowski_inner(v, v, axis=axis)
+            res = torch.zeros_like(x)
+            for n in range(degree):
+                scale_n = scale ** n / math.factorial(2*n)
+                term = x + v / (2*n+1)
+                res = res + scale_n * term
+        else:
+            # Normal expmap
+            v_norm = self._minkowski_norm(v, axis=axis)
+            c_norm_prod = (self.c.sqrt() * v_norm)#.clamp_min(self.min_enorm) # TODO
+            res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod * v
         if backproject:
             res = self.proj(res, axis=axis)
         return res
 
-    def expmap_0(self, v: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, axis: int=-1, backproject: bool=True,
+                 version: str="normal") -> torch.Tensor:
+        """
+        Map tangent vector(s) v at the Hyperboloid origin to the Hyperboloid.
+        [Exponential map]
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s) in the tangent space of the Hyperboloid origin
+        axis : int
+            Axis along which to compute the exponential map (default: -1)
+        backproject : bool
+            Whether to project results back to the Hyperboloid (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The resulting Hyperboloid point(s) after mapping v to the Hyperboloid
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
         v, = self._2manifold_dtype([v])
-        v_norm = v.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = (self.c.sqrt() * v_norm).clamp_min(self.min_enorm)
-        res = torch.tanh(c_norm_prod) / c_norm_prod * v
+        # TODO: check if Taylor expansion has any advantages in real world applications
+        if version[:-2] == "Taylor": # e.g. "Taylor 4" for degree 4 approx.
+            degree = int(version[-1])
+            origin = torch.zeros_like(v, dtype=self.dtype)
+            if axis < 0:
+                axis = v.dim() + axis
+            slicing = [slice(None)] * v.dim()
+            slicing[axis] = slice(0, 1)
+            origin[tuple(slicing)] = 1 / self.c.sqrt()
+            scale = self.c * self._minkowski_inner(v, v, axis=axis)
+            res = torch.zeros_like(origin)
+            for n in range(degree):
+                scale_n = scale ** n / math.factorial(2*n)
+                term = origin + v / (2*n+1)
+                res = res + scale_n * term
+        else:
+            v_norm = self._minkowski_norm(v, axis=axis)
+            c_norm_prod = self.c.sqrt() * v_norm
+            res0 = cosh(c_norm_prod) + sinh(c_norm_prod) * v.narrow(axis, 0, 1) / v_norm
+            res_rem = sinh(c_norm_prod) * v.narrow(axis, 1, v.shape[axis]-1) / v_norm
+            res = torch.cat((res0, res_rem), dim=axis) / self.c.sqrt()
         if backproject:
             res = self.proj(res, axis=axis)
         return res
 
     def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+        """
+        First-order approximation of the exponential map for vector(s) v at Hyperboloid point(s) x.
+        [Retraction map]
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vector(s) in the tangent space(s) of x
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the backprojection of the retraction (default: -1)
+        backproject : bool
+            Whether to project results back to the Hyperboloid (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The resulting Hyperboloid point(s) after approximate mapping v to the Hyperboloid
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
         v, x = self._2manifold_dtype([v, x])
         res = x + v
         if backproject:
@@ -264,26 +340,56 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: ...
-
-        Stability
-        ---------
-        #TODO: ...
-        logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
-        since artanh(z) ~ z for small z.
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
         """
+        # Prob. not neceassary as this is only possible iff <x,y>=1/c,
+        # which yields the evaluation of cosh(-1)=i*pi
         y, x = self._2manifold_dtype([y, x])
         dist = self.dist(x, y, axis=axis)
         num = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
-        denom = self._minkowski_norm(num, axis=axis)#.clamp_min(self.min_enorm)
-        res = num * dist / denom
+        denom = self._minkowski_norm(num, axis=axis)#.clamp_min(self.min_enorm) # TODO
+        res = dist * num / denom
+        if True:
+            res = self.tangent_proj(res, x, axis=axis)
         return res
 
     def logmap_0(self, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Map Hyperboloid point(s) y to the tangent space of the Hyperboloid origin.
+        [Logarithmic map]
+
+        Parameters
+        ----------
+        y : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the logarithmic map (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The resulting tangent vector(s) after mapping y to the tangent space of the origin
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        # TODO: should we just use logmap at the origin for speed here?
         y, = self._2manifold_dtype([y])
-        y_norm = y.norm(p=2, dim=axis, keepdim=True)
-        c_norm_prod = (self.c.sqrt() * y_norm).clamp_min(self.min_enorm)
-        res = torch.atanh(c_norm_prod) / c_norm_prod * y
+        y_rem = y.narrow(axis, 1, y.shape[axis]-1)
+        y_rem_norm = y_rem.norm(p=2, dim=axis, keepdim=True)
+        scale = self.dist_0(y, axis=axis) / y_rem_norm.clamp_min(self.min_enorm)
+        res = torch.cat((torch.zeros_like(y.narrow(axis, 0, 1)), scale * y_rem), dim=axis)
+        if True:
+            origin = torch.zeros_like(res, dtype=self.dtype)
+            if axis < 0:
+                axis = res.dim() + axis
+            slicing = [slice(None)] * res.dim()
+            slicing[axis] = slice(0, 1)
+            origin[tuple(slicing)] = 1 / self.c.sqrt()
+            res = self.tangent_proj(res, origin, axis=axis)
         return res
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -309,19 +415,17 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: version FHNN is 1) and version else is 2)
         Aaron Lou, et al. "Differentiating through the fréchet mean."
             International conference on machine learning (2020).
-        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
-            Advances in neural information processing systems 32 (2019).
         """
-        # TODO: check which version is correct
         v, x, y = self._2manifold_dtype([v, x, y])
         vy = self._minkowski_inner(v, y, axis=axis)
         xy = self._minkowski_inner(x, y, axis=axis)
         denom = 1 / self.c - xy
-        scale = vy / denom
+        scale = vy / denom.clamp_min(self.min_enorm)
         res = v + scale * (x + y)
+        if True:
+            res = self.tangent_proj(res, y, axis=axis)
         return res
 
     def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -345,13 +449,9 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        #TODO: version FHNN is 1) and version else is 2)
         Aaron Lou, et al. "Differentiating through the fréchet mean."
             International conference on machine learning (2020).
-        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
-            Advances in neural information processing systems 32 (2019).
         """
-        # TODO: check which version is correct
         v, y = self._2manifold_dtype([v, y])
         origin = torch.zeros_like(y, dtype=self.dtype)
         if axis < 0:
@@ -364,6 +464,8 @@ class Hyperboloid(Manifold):
         denom = 1 / self.c + y0 / self.c.sqrt()
         scale = vy / denom
         res = v + scale * (y + origin)
+        if True:
+            res = self.tangent_proj(res, y, axis=axis)
         return res
 
     def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -489,6 +591,36 @@ class Hyperboloid(Manifold):
         res = torch.cat((x0, x_rem), dim=axis)
         return res
 
+    def tangent_proj(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Project point(s) v onto the tangent space of Hyperboloid point(s) x
+        v such that the minkowski inner product of v and x vanishes.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Point(s)
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the projection (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The tangent vector(s)
+
+        References
+        ----------
+        Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
+            Advances in neural information processing systems 32 (2019).
+        """
+        x, = self._2manifold_dtype([x])
+        x_normalized = x / (-self.c * self._minkowski_inner(x, x, axis=axis)).sqrt()
+        coeff = self._minkowski_inner(x_normalized, v, axis=axis) / self._minkowski_inner(x_normalized, x_normalized, axis=axis)
+        res = v - coeff * x_normalized
+        return res
+
     def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:
         """
         Check if point(s) x lie on the Hyperboloid.
@@ -506,7 +638,7 @@ class Hyperboloid(Manifold):
             True if all points x lie in the Hyperboloid, False otherwise
         """
         x, = self._2manifold_dtype([x])
-        res = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=5e-04)
+        res = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=8e-05)
         return res
 
     def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:
@@ -528,7 +660,7 @@ class Hyperboloid(Manifold):
             True if all vectors v belong to their tangent spaces, False otherwise
         """
         v, x = self._2manifold_dtype([v, x])
-        res = torch.all(torch.abs(self._minkowski_inner(v, x, axis=axis)) < 1e-03)
+        res = torch.all(torch.abs(self._minkowski_inner(v, x, axis=axis)) < 5e-04)
         return res
 
     def to_poincare(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
