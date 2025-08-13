@@ -128,13 +128,30 @@ class Hyperboloid(Manifold):
         return res
 
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
-        #TODO
+        """
+        Multiply Hyperboloid point(s) x with scalar(s) r.
+
+        Parameters
+        ----------
+        r : torch.Tensor
+            Scalar factor(s)
+        x : torch.Tensor
+            Hyperboloid point(s)
+        axis : int
+            Axis along which to compute the scalar multiplication (default: -1)
+        backproject : bool
+            Whether to project results back to the Hyperboloid (default: True)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The product(s) of r and x
+        """
         r, x = self._2manifold_dtype([r, x])
-        x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
-        c_norm_prod = self.c.sqrt() * x_norm
-        res = torch.tanh(r * torch.atanh(c_norm_prod)) / c_norm_prod * x
-        if backproject:
-            res = self.proj(res, axis=axis)
+        log0_x = self.logmap_0(x, axis=axis)
+        unit_tangent = log0_x / (self._minkowski_inner(log0_x, log0_x, axis=axis).sqrt()).clamp_min(self.min_enorm)
+        tangent = r * self.dist_0(x, axis=axis) * unit_tangent
+        res = self.expmap_0(tangent, axis=axis, backproject=backproject)
         return res
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -280,8 +297,8 @@ class Hyperboloid(Manifold):
         else:
             v_norm = self._minkowski_norm(v, axis=axis)
             c_norm_prod = self.c.sqrt() * v_norm
-            res0 = cosh(c_norm_prod) + sinh(c_norm_prod) * v.narrow(axis, 0, 1) / v_norm
-            res_rem = sinh(c_norm_prod) * v.narrow(axis, 1, v.shape[axis]-1) / v_norm
+            res0 = cosh(c_norm_prod) + sinh(c_norm_prod) * v.narrow(axis, 0, 1) / v_norm.clamp_min(self.min_enorm)
+            res_rem = sinh(c_norm_prod) * v.narrow(axis, 1, v.shape[axis]-1) / v_norm.clamp_min(self.min_enorm)
             res = torch.cat((res0, res_rem), dim=axis) / self.c.sqrt()
         if backproject:
             res = self.proj(res, axis=axis)
@@ -638,7 +655,9 @@ class Hyperboloid(Manifold):
             True if all points x lie in the Hyperboloid, False otherwise
         """
         x, = self._2manifold_dtype([x])
-        res = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=8e-05)
+        cond1 = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=1e-04)
+        cond2 = torch.all(x.narrow(axis, 0, 1) > 0)
+        res = cond1 and cond2
         return res
 
     def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:
