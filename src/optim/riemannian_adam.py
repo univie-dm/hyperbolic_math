@@ -1,7 +1,7 @@
 import torch
 
 from typing import Any, Dict, Iterable, Tuple, Union
-from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
+from ..manifolds import ManifoldParameter, Euclidean
 
 
 __all__ = ["RiemannianAdam"]
@@ -146,9 +146,6 @@ class RiemannianAdam(torch.optim.Adam):
                     # Get the direction for ascend
                     direction = exp_avg.div(bias_correction1) / denom.add_(eps)
 
-                    if isinstance(manifold, Hyperboloid):
-                        # Project the gradient direction onto the Tangent space
-                        pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
                         new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis, backproject=self.backproject)

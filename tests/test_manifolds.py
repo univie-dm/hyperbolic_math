@@ -5,9 +5,11 @@ from typing import Tuple
 from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
-def _test_addition(manifold: Manifold, tolerance: Tuple[float, float],
+def test_addition(manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test addition operation."""
+    if isinstance(manifold, Hyperboloid):
+        pytest.skip()
     atol, rtol = tolerance
     identity = torch.zeros_like(uniform_points)
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
@@ -42,9 +44,10 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     identity = torch.ones((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
     r1 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
     r2 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
-    origin = torch.zeros_like(uniform_points)
     if isinstance(manifold, Hyperboloid):
-        origin[:,0] = 1 / manifold.c.sqrt()
+        origin = manifold._create_origin_from_reference(uniform_points)
+    else:
+        origin = torch.zeros_like(uniform_points)
     # Multiplicative identity
     torch.testing.assert_close(
         manifold.scalar_mul(identity, uniform_points), uniform_points, atol=atol, rtol=rtol
@@ -149,6 +152,10 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     """Test the dist and dist_0 operations."""
     atol, rtol = tolerance
     x, y, z = uniform_points.split(uniform_points.shape[0] // 3, dim=0)
+    if isinstance(manifold, Hyperboloid):
+        origin = manifold._create_origin_from_reference(uniform_points)
+    else:
+        origin = torch.zeros_like(uniform_points)
     assert torch.isfinite(manifold.dist(x, y)).all()
     assert torch.isfinite(manifold.dist_0(x)).all()
     # Reflexivity
@@ -163,9 +170,6 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     # Triangle inequality
     assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z) + atol)
     # Consistency of dist with dist_0
-    origin = torch.zeros_like(uniform_points)
-    if isinstance(manifold, Hyperboloid):
-        origin[:,0] = 1 / manifold.c.sqrt()
     torch.testing.assert_close(
         manifold.dist(uniform_points, origin),
         manifold.dist_0(uniform_points),
@@ -178,12 +182,14 @@ def test_expmap_retraction_logmap(manifold: Manifold, tolerance: Tuple[float, fl
     """Test the expmap, expmap_0, retraction, logmap and logmap_0 operations."""
     atol, rtol = tolerance
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
-    origin = torch.zeros_like(uniform_points)
+    if isinstance(manifold, Hyperboloid):
+        origin = manifold._create_origin_from_reference(uniform_points)
+    else:
+        origin = torch.zeros_like(uniform_points)
     bound = 10
     v = torch.empty_like(uniform_points).uniform_(-bound, bound)
     v0 = v.clone()
     if isinstance(manifold, Hyperboloid):
-        origin[:,0] = 1 / manifold.c.sqrt()
         # Project the candidate tangent vectors onto the tangent space at the Hyperboloid origin
         v0 = manifold.tangent_proj(v, origin)
         # Project the candidate tangent vectors onto the tangent space at x
@@ -234,14 +240,16 @@ def test_ptransp(manifold: Manifold, tolerance: Tuple[float, float],
                  uniform_points: torch.Tensor) -> None:
     """Test the ptransp and ptransp_0 operations."""
     atol, rtol = tolerance
-    origin = torch.zeros_like(uniform_points)
+    if isinstance(manifold, Hyperboloid):
+        origin = manifold._create_origin_from_reference(uniform_points)
+    else:
+        origin = torch.zeros_like(uniform_points)
     # Large tangent vectors can lead to numerical instability
     # -> Riemannian metric may not be preserved when parallel transporting
     bound = 200
     u = torch.empty_like(uniform_points).uniform_(-bound, bound)
     v = torch.empty_like(uniform_points).uniform_(-bound, bound)
     if isinstance(manifold, Hyperboloid):
-        origin[:,0] = 1 / manifold.c.sqrt()
         # Project the candidate tangent vectors onto the tangent space at the Hyperboloid origin
         u = manifold.tangent_proj(v, origin)
         v = manifold.tangent_proj(v, origin)
@@ -279,6 +287,10 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
     """Test the tangent_inner and tangent_norm operations."""
     atol, rtol = tolerance
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
+    if isinstance(manifold, Hyperboloid):
+        origin = manifold._create_origin_from_reference(uniform_points)
+    else:
+        origin = torch.zeros_like(uniform_points)
     # Consistency of tangent_norm with logmap/logmap_0 and dist/dist_0
     torch.testing.assert_close(
         manifold.dist(x, y),
@@ -286,9 +298,6 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
         atol=atol,
         rtol=rtol
     )
-    origin = torch.zeros_like(uniform_points)
-    if isinstance(manifold, Hyperboloid):
-        origin[:,0] = 1 / manifold.c.sqrt()
     torch.testing.assert_close(
         manifold.dist_0(uniform_points),
         manifold.tangent_norm(manifold.logmap_0(uniform_points), origin),
@@ -296,12 +305,12 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
         rtol=rtol
     )
 
-
 # Manifold-specific tests
 def test_gyration(seed: None, manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test the gyration operation of the PoincareBall."""
     if isinstance(manifold, (Euclidean, Hyperboloid)):
+        # The gyration operation is not defined for the Euclidean-/Hyperboloid manifold
         pytest.skip()
     atol, rtol = tolerance
     x, y, z, a = uniform_points.split(uniform_points.shape[0] // 4, dim=0)

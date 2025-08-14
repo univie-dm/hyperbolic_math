@@ -1,7 +1,7 @@
 import torch
 
 from typing import Any, Dict, Iterable, Union
-from ..manifolds import ManifoldParameter, Euclidean, Hyperboloid
+from ..manifolds import ManifoldParameter, Euclidean
 
 
 __all__ = ["RiemannianSGD"]
@@ -116,9 +116,6 @@ class RiemannianSGD(torch.optim.Optimizer):
                         else:
                             grad = momentum_buffer
 
-                    if isinstance(manifold, Hyperboloid):
-                        # Project the gradient direction onto the Tangent space
-                        pass
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
                         new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis, backproject=self.backproject)

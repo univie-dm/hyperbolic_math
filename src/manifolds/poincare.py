@@ -32,7 +32,7 @@ class PoincareBall(Manifold):
             raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32 and float64.")
 
         if torch.finfo(c.dtype).eps < torch.finfo(self.dtype).eps:
-            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}."
+            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}. "
                   f"All manifold operations will be performed in precision {c.dtype}!")
             self.dtype = c.dtype
 

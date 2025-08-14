@@ -12,7 +12,6 @@ class Hyperboloid(Manifold):
     Convention: -x0^2 + x1^2 + ... + xd^2 = -1/c, x0 > 0, with c > 0 and sectional curvature -c.
     """
     def __init__(
-        #TODO
         self,
         c: torch.Tensor = torch.tensor([1.]),
         trainable_c: bool = False,
@@ -110,21 +109,40 @@ class Hyperboloid(Manifold):
         res = self._minkowski_inner(x, x, axis=axis).clamp_min(0.).sqrt() # TODO: smooth clamp??
         return res
 
+    def _create_origin_from_reference(self, reference_tensor: torch.Tensor, axis: int=-1) -> torch.Tensor:
+        """
+        Create the hyperboloid origin (1/√c, 0, 0, ..., 0) with the same shape as the reference tensor.
+
+        Parameters
+        ----------
+        reference_tensor : torch.Tensor
+            Reference tensor to match shape and device
+        axis : int
+            Axis along which to set the time component (default: -1)
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The hyperboloid origin
+        """
+        res = torch.zeros_like(reference_tensor, dtype=self.dtype)
+        if axis < 0:
+            axis = reference_tensor.dim() + axis
+        slicing = [slice(None)] * reference_tensor.dim()
+        slicing[axis] = slice(0, 1)
+        res[tuple(slicing)] = 1 / self.c.sqrt()
+        return res
+
     def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         #TODO
         x, y = self._2manifold_dtype([x, y])
-        x2 = x.pow(2).sum(dim=axis, keepdim=True)
-        y2 = y.pow(2).sum(dim=axis, keepdim=True)
-        xy = (x * y).sum(dim=axis, keepdim=True)
-        num = (1 + 2 * self.c * xy + self.c * y2) * x + (1 - self.c * x2) * y
-        denom = (1 + 2 * self.c * xy + self.c**2 * x2 * y2).clamp_min(self.min_enorm)
-        res = num / denom
-        if backproject:
-            res = self.proj(res, axis=axis)
+        res = self.expmap_0(self.logmap_0(x, axis=axis) + self.logmap_0(y, axis=axis), axis=axis, backproject=backproject)
         # Some code:
         # u = self.logmap0(y, c)
         # v = self.ptransp0(x, u, c)
         # return self.expmap(v, x, c)
+        if backproject:
+            res = self.proj(res, axis=axis)
         return res
 
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
@@ -247,8 +265,8 @@ class Hyperboloid(Manifold):
         else:
             # Normal expmap
             v_norm = self._minkowski_norm(v, axis=axis)
-            c_norm_prod = (self.c.sqrt() * v_norm)#.clamp_min(self.min_enorm) # TODO
-            res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod * v
+            c_norm_prod = self.c.sqrt() * v_norm
+            res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm) * v
         if backproject:
             res = self.proj(res, axis=axis)
         return res
@@ -282,12 +300,7 @@ class Hyperboloid(Manifold):
         # TODO: check if Taylor expansion has any advantages in real world applications
         if version[:-2] == "Taylor": # e.g. "Taylor 4" for degree 4 approx.
             degree = int(version[-1])
-            origin = torch.zeros_like(v, dtype=self.dtype)
-            if axis < 0:
-                axis = v.dim() + axis
-            slicing = [slice(None)] * v.dim()
-            slicing[axis] = slice(0, 1)
-            origin[tuple(slicing)] = 1 / self.c.sqrt()
+            origin = self._create_origin_from_reference(v, axis=axis)
             scale = self.c * self._minkowski_inner(v, v, axis=axis)
             res = torch.zeros_like(origin)
             for n in range(degree):
@@ -295,11 +308,13 @@ class Hyperboloid(Manifold):
                 term = origin + v / (2*n+1)
                 res = res + scale_n * term
         else:
+            # Normal expmap_0
             v_norm = self._minkowski_norm(v, axis=axis)
             c_norm_prod = self.c.sqrt() * v_norm
-            res0 = cosh(c_norm_prod) + sinh(c_norm_prod) * v.narrow(axis, 0, 1) / v_norm.clamp_min(self.min_enorm)
-            res_rem = sinh(c_norm_prod) * v.narrow(axis, 1, v.shape[axis]-1) / v_norm.clamp_min(self.min_enorm)
-            res = torch.cat((res0, res_rem), dim=axis) / self.c.sqrt()
+            sinh_scale = sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm)
+            res0 = cosh(c_norm_prod) / self.c.sqrt() + sinh_scale * v.narrow(axis, 0, 1)
+            res_rem = sinh_scale * v.narrow(axis, 1, v.shape[axis]-1)
+            res = torch.cat((res0, res_rem), dim=axis)
         if backproject:
             res = self.proj(res, axis=axis)
         return res
@@ -360,12 +375,10 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
-        # Prob. not neceassary as this is only possible iff <x,y>=1/c,
-        # which yields the evaluation of cosh(-1)=i*pi
         y, x = self._2manifold_dtype([y, x])
         dist = self.dist(x, y, axis=axis)
         num = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
-        denom = self._minkowski_norm(num, axis=axis)#.clamp_min(self.min_enorm) # TODO
+        denom = self._minkowski_norm(num, axis=axis)
         res = dist * num / denom
         if True:
             res = self.tangent_proj(res, x, axis=axis)
@@ -393,19 +406,13 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
-        # TODO: should we just use logmap at the origin for speed here?
         y, = self._2manifold_dtype([y])
         y_rem = y.narrow(axis, 1, y.shape[axis]-1)
         y_rem_norm = y_rem.norm(p=2, dim=axis, keepdim=True)
         scale = self.dist_0(y, axis=axis) / y_rem_norm.clamp_min(self.min_enorm)
         res = torch.cat((torch.zeros_like(y.narrow(axis, 0, 1)), scale * y_rem), dim=axis)
         if True:
-            origin = torch.zeros_like(res, dtype=self.dtype)
-            if axis < 0:
-                axis = res.dim() + axis
-            slicing = [slice(None)] * res.dim()
-            slicing[axis] = slice(0, 1)
-            origin[tuple(slicing)] = 1 / self.c.sqrt()
+            origin = self._create_origin_from_reference(res, axis=axis)
             res = self.tangent_proj(res, origin, axis=axis)
         return res
 
@@ -470,12 +477,7 @@ class Hyperboloid(Manifold):
             International conference on machine learning (2020).
         """
         v, y = self._2manifold_dtype([v, y])
-        origin = torch.zeros_like(y, dtype=self.dtype)
-        if axis < 0:
-            axis = y.dim() + axis
-        slicing = [slice(None)] * y.dim()
-        slicing[axis] = slice(0, 1)
-        origin[tuple(slicing)] = 1 / self.c.sqrt()
+        origin = self._create_origin_from_reference(v, axis=axis)
         vy = self._minkowski_inner(v, y, axis=axis)
         y0 = y.narrow(axis, 0, 1)
         denom = 1 / self.c + y0 / self.c.sqrt()
@@ -551,7 +553,8 @@ class Hyperboloid(Manifold):
 
     def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
-        Compute the Riemannian gradient(s) at Hyperboloid point(s) x from the Euclidean gradient(s).
+        Compute the Riemannian gradient(s) at Hyperboloid point(s) x from the
+        Euclidean gradient(s) and project them onto the tangent space of x.
 
         Parameters
         ----------
@@ -572,10 +575,14 @@ class Hyperboloid(Manifold):
         Maximillian Nickel, Douwe Kiela. "Learning continuous hierarchies in the lorentz model of hyperbolic geometry."
             International conference on machine learning. PMLR, 2018.
         """
-        # Compute the orthogonal projection of the gradient onto the tangent space of x
-        # in the manifold's precision and cast it to the gradient's precision
         x, = self._2manifold_dtype([x])
-        normal = (-self.c * self._minkowski_inner(x, grad, axis=axis) * x).to(grad.dtype)
+        # Convert the Riemannian gradient to the Euclidean one
+        grad.narrow(axis, 0, 1).mul_(-1)
+        # Compute the orthogonal projection of the gradient onto the tangent space of x
+        x_normalized = x / (-self.c * self._minkowski_inner(x, x, axis=axis)).sqrt()
+        coeff = self._minkowski_inner(x_normalized, grad, axis=axis) / self._minkowski_inner(x_normalized, x_normalized, axis=axis)
+        # Cast the normal component to the gradient's precision
+        normal = (coeff * x_normalized).to(grad.dtype)
         res = grad - normal
         return res
 
