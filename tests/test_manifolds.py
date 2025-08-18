@@ -9,10 +9,11 @@ def test_addition(manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test addition operation."""
     if isinstance(manifold, Hyperboloid):
+        # The addition operation is not well-defined for the Hyperboloid manifold
         pytest.skip()
     atol, rtol = tolerance
-    identity = torch.zeros_like(uniform_points)
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
+    identity = torch.zeros_like(uniform_points)
     # Additive identity
     torch.testing.assert_close(
         manifold.addition(identity, uniform_points), uniform_points, atol=atol, rtol=rtol
@@ -27,8 +28,6 @@ def test_addition(manifold: Manifold, tolerance: Tuple[float, float],
     torch.testing.assert_close(
         manifold.addition(uniform_points, -uniform_points)+1, identity+1, atol=atol, rtol=rtol
     )
-    # Left cancellation law - Poincare fails in higher dimensions with abs./rel. diff up to 1e-04
-    #torch.testing.assert_close(manifold.addition(-x, manifold.addition(x, y)), y, atol=atol, rtol=rtol)
     # Distributive law
     torch.testing.assert_close(-manifold.addition(x, y), manifold.addition(-x, -y), atol=atol, rtol=rtol)
     # Gyrotriangle inequality
@@ -52,35 +51,6 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     torch.testing.assert_close(
         manifold.scalar_mul(identity, uniform_points), uniform_points, atol=atol, rtol=rtol
     )
-
-    ############### Addition tests ###############
-    # # N-Gyroaddition
-    # n = torch.randint(3, 10, (1,)).item()
-    # n_sum = torch.zeros_like(uniform_points)
-    # for _ in range(n):
-    #     n_sum = manifold.addition(n_sum, uniform_points)
-    # torch.testing.assert_close(n_sum, manifold.scalar_mul(n * identity, uniform_points),
-    #                            atol=atol, rtol=rtol)
-    # # Distributive laws
-    # torch.testing.assert_close(
-    #     manifold.scalar_mul(r1 + r2, uniform_points),
-    #     manifold.addition(
-    #         manifold.scalar_mul(r1, uniform_points),
-    #         manifold.scalar_mul(r2, uniform_points),
-    #     ),
-    #     atol=atol,
-    #     rtol=rtol
-    # )
-    #############################################
-
-    if isinstance(manifold, (Euclidean, PoincareBall)):
-        # Hyperboloid: -uniform_points are not on the manifold since they are past-pointing
-        torch.testing.assert_close(
-            manifold.scalar_mul(-r1, uniform_points),
-            manifold.scalar_mul(r1, -uniform_points),
-            atol=atol,
-            rtol=rtol
-        )
     # Associative laws
     torch.testing.assert_close(
         manifold.scalar_mul(r1 * r2, uniform_points),
@@ -95,6 +65,34 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
         rtol=rtol
     )
     if isinstance(manifold, (Euclidean, PoincareBall)):
+        # Hyperboloid: addition is not well defined
+        n = torch.randint(3, 10, (1,)).item()
+        if isinstance(manifold, Hyperboloid):
+            n_sum = manifold._create_origin_from_reference(uniform_points)
+        else:
+            n_sum = torch.zeros_like(uniform_points)
+        for _ in range(n):
+            n_sum = manifold.addition(n_sum, uniform_points)
+        # N-Gyroaddition
+        torch.testing.assert_close(n_sum, manifold.scalar_mul(n * identity, uniform_points),
+                                atol=atol, rtol=rtol)
+        # Distributive laws
+        torch.testing.assert_close(
+            manifold.scalar_mul(r1 + r2, uniform_points),
+            manifold.addition(
+                manifold.scalar_mul(r1, uniform_points),
+                manifold.scalar_mul(r2, uniform_points),
+            ),
+            atol=atol,
+            rtol=rtol
+        )
+        # Hyperboloid: -uniform_points are not on the manifold since they are past-pointing
+        torch.testing.assert_close(
+            manifold.scalar_mul(-r1, uniform_points),
+            manifold.scalar_mul(r1, -uniform_points),
+            atol=atol,
+            rtol=rtol
+        )
         # Scaling property
         left_side = manifold.scalar_mul(torch.abs(r1), uniform_points)
         left_side /= manifold.scalar_mul(r1, uniform_points).norm(p=2, dim=-1, keepdim=True)

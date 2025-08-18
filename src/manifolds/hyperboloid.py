@@ -133,18 +133,6 @@ class Hyperboloid(Manifold):
         res[tuple(slicing)] = 1 / self.c.sqrt()
         return res
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
-        #TODO
-        x, y = self._2manifold_dtype([x, y])
-        res = self.expmap_0(self.logmap_0(x, axis=axis) + self.logmap_0(y, axis=axis), axis=axis, backproject=backproject)
-        # Some code:
-        # u = self.logmap0(y, c)
-        # v = self.ptransp0(x, u, c)
-        # return self.expmap(v, x, c)
-        if backproject:
-            res = self.proj(res, axis=axis)
-        return res
-
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Multiply Hyperboloid point(s) x with scalar(s) r.
@@ -351,7 +339,7 @@ class Hyperboloid(Manifold):
             res = self.proj(res, axis=axis)
         return res
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map Hyperboloid point(s) y to the tangent space(s) of Hyperboloid point(s) x.
         [Logarithmic map]
@@ -364,6 +352,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the logarithmic map (default: -1)
+        backproject : bool
+            Whether to project the results onto the tangent space(s) of x (default: True)
 
         Returns
         -------
@@ -380,11 +370,11 @@ class Hyperboloid(Manifold):
         num = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
         denom = self._minkowski_norm(num, axis=axis)
         res = dist * num / denom
-        if True:
+        if backproject:
             res = self.tangent_proj(res, x, axis=axis)
         return res
 
-    def logmap_0(self, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map Hyperboloid point(s) y to the tangent space of the Hyperboloid origin.
         [Logarithmic map]
@@ -395,6 +385,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the logarithmic map (default: -1)
+        backproject : bool
+            Whether to project the results onto the tangent space of the Hyperboloid origin (default: True)
 
         Returns
         -------
@@ -411,12 +403,12 @@ class Hyperboloid(Manifold):
         y_rem_norm = y_rem.norm(p=2, dim=axis, keepdim=True)
         scale = self.dist_0(y, axis=axis) / y_rem_norm.clamp_min(self.min_enorm)
         res = torch.cat((torch.zeros_like(y.narrow(axis, 0, 1)), scale * y_rem), dim=axis)
-        if True:
+        if backproject:
             origin = self._create_origin_from_reference(res, axis=axis)
             res = self.tangent_proj(res, origin, axis=axis)
         return res
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space(s) of
         Hyperboloid point(s) x to the tangent space(s) of Hyperboloid point(s) y.
@@ -431,6 +423,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the parallel transport (default: -1)
+        backproject : bool
+            Whether to project the results onto the tangent space(s) of y (default: True)
 
         Returns
         -------
@@ -448,11 +442,11 @@ class Hyperboloid(Manifold):
         denom = 1 / self.c - xy
         scale = vy / denom.clamp_min(self.min_enorm)
         res = v + scale * (x + y)
-        if True:
+        if backproject:
             res = self.tangent_proj(res, y, axis=axis)
         return res
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space of the
         Hyperboloid origin to the tangent space(s) of Hyperboloid point(s) y.
@@ -465,6 +459,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the parallel transport (default: -1)
+        backproject : bool
+            Whether to project the results onto the tangent space(s) of y (default: True)
 
         Returns
         -------
@@ -483,7 +479,7 @@ class Hyperboloid(Manifold):
         denom = 1 / self.c + y0 / self.c.sqrt()
         scale = vy / denom
         res = v + scale * (y + origin)
-        if True:
+        if backproject:
             res = self.tangent_proj(res, y, axis=axis)
         return res
 
@@ -632,7 +628,7 @@ class Hyperboloid(Manifold):
         Returns
         -------
         res : torch.Tensor (dtype=self.dtype)
-            The tangent vector(s)
+            The projected tangent vector(s)
 
         References
         ----------

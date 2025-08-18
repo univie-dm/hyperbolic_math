@@ -117,7 +117,7 @@ def to_hyperboloid_vis(x: torch.Tensor, poincare: PoincareBall) -> torch.Tensor:
     """Project PoincareBall points to the Hyperboloid. Before projecting to the Hyperboloid,
        we rescale the points to match the representational limitations between the PoincareBall
        and the Hyperboloid."""
-    x = x * 0.95
+    x = x * 0.7
     res = poincare.to_hyperboloid(x)
     return res
 

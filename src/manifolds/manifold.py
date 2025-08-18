@@ -26,17 +26,8 @@ class Manifold(torch.nn.Module):
         """Convert a list of tensor(s) to the manifold dtype."""
         raise NotImplementedError
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
-        """Add manifold point(s) y to manifold point(s) x."""
-        raise NotImplementedError
-
     def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
         """Multiply manifold point(s) x with scalar(s) r."""
-        raise NotImplementedError
-
-    def dist2hyperplane(self, x: torch.Tensor, a: torch.Tensor, p: torch.Tensor,
-                        axis: int, backproject: bool) -> torch.Tensor:
-        """Computes the geodesic distance(s) of point(s) x to the hyperplane(s) defined by a and p."""
         raise NotImplementedError
 
     def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
@@ -59,20 +50,20 @@ class Manifold(torch.nn.Module):
         """Approximately map tangent vector(s) v at manifold point(s) x to the manifold. [Retraction map]"""
         raise NotImplementedError
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
         """Map manifold point(s) y to the tangent space(s) of manifold point(s) x. [Logarithmic map]"""
         raise NotImplementedError
 
-    def logmap_0(self, y: torch.Tensor, axis: int) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
         """Map manifold point(s) y to the tangent space of the manifold's origin. [Logarithmic map]"""
         raise NotImplementedError
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space(s) of
            manifold point(s) x to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space of
            the manifold's origin to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
@@ -92,7 +83,11 @@ class Manifold(torch.nn.Module):
         raise NotImplementedError
 
     def proj(self, x: torch.Tensor, axis: int):
-        """Project point(s) x onto the clipped manifold."""
+        """Project point(s) x onto the manifold."""
+        raise NotImplementedError
+
+    def tangent_proj(self, v: torch.Tensor, x: torch.Tensor, axis: int):
+        """Project point(s) v onto the tangent space(s) of manifold point(s) x."""
         raise NotImplementedError
 
     def is_in_manifold(self, x: torch.Tensor, axis: int) -> bool:
