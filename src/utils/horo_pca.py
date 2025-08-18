@@ -231,7 +231,6 @@ class HoroPCA(nn.Module):
         x : torch.Tensor
             Manifold point(s) of shape (n_samples, n_in_features)
         """
-        assert self.manifold.is_in_manifold(x), "Input points must be in the manifold of the model."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
         # Compute the Frechet mean of the data points
@@ -266,7 +265,6 @@ class HoroPCA(nn.Module):
         res : torch.Tensor (dtype=self.manifold.dtype)
             The projected PoincareBall point(s) of shape (n_samples, self.n_components)
         """
-        assert self.manifold.is_in_manifold(x), "Input points must be in the same manifold that was used during fit()."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
         if recompute_mean or self.data_mean is None:
