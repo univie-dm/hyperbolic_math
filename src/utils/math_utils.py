@@ -1,6 +1,5 @@
 """Math utils functions for hyperbolic operations with numerically stable limits."""
 
-import math
 import torch
 
 
@@ -41,46 +40,34 @@ def smooth_clamp(x: torch.Tensor, min_value: float, max_value: float) -> torch.T
 @torch.jit.script
 def cosh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic cosine. Domain=(-inf, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    return x.clamp(-clamp, clamp).cosh()
-    #return torch.cosh(smooth_clamp(x, -clamp, clamp))
+    # Practical limits: float32 ~88.0, float64 ~709.0
+    clamp = 88.0 if x.dtype == torch.float32 else 709.0
+    return torch.cosh(x.clamp(-clamp, clamp))
 
 @torch.jit.script
 def sinh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic sine. Domain=(-inf, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    return x.clamp(-clamp, clamp).sinh()
-    #return torch.sinh(smooth_clamp(x, -clamp, clamp))
+    # Practical limits: float32 ~88.0, float64 ~709.0
+    clamp = 88.0 if x.dtype == torch.float32 else 709.0
+    return torch.sinh(x.clamp(-clamp, clamp))
 
 @torch.jit.script
 def tanh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic tangent. Domain=(-inf, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    return x.clamp(-clamp, clamp).tanh()
-    #return torch.tanh(smooth_clamp(x, -clamp, clamp))
+    return torch.tanh(x)
 
 @torch.jit.script
 def arcosh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic cosine. Domain=[1, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    return x.clamp(1.0, clamp).acosh()
-    #return torch.acosh(smooth_clamp(x, 1.0, clamp))
+    return torch.acosh(x.clamp_min(1.0))
 
 @torch.jit.script
 def arsinh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic sine. Domain=(-inf, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    return x.clamp(-clamp, clamp).asinh()
-    #return torch.asinh(smooth_clamp(x, -clamp, clamp))
+    return torch.asinh(x)
 
 @torch.jit.script
 def artanh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic tangent. Domain=(-1, 1)."""
     eps = _get_tensor_eps(x)
-    return x.clamp(-1 + eps, 1 - eps).atanh()
-    #return torch.atanh(smooth_clamp(x, -1 + eps, 1 - eps))
+    return torch.atanh(x.clamp(-1 + eps, 1 - eps))

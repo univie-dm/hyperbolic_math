@@ -30,24 +30,24 @@ def compute_frechet_mean(x: torch.Tensor, hyperboloid: Hyperboloid) -> torch.Ten
     has_converged = False
     batch_size = x.shape[0]
     # Try multiple learning rates
-    for lr in [1e-01, 2e-01, 5e-02, 4e-01, 2.5e-02]:
+    for lr in [1e-02, 2e-02, 5e-03, 4e-02, 2.5e-03]:
         mean = mean_init
         for _ in range(5_000):
             # Compute the logarithmic map of x with respect to the current mean
             log_x = torch.sum(hyperboloid.logmap(x, mean), dim=0, keepdim=True)
-            grad = log_x / batch_size
+            update = lr * log_x / batch_size
             # Update the mean using the exponential map
-            mean = hyperboloid.expmap(lr * grad, mean)
-            if grad.norm(p=2, dim=-1, keepdim=False) < 5e-07:
+            mean = hyperboloid.expmap(update, mean)
+            # Stop if the update has become negligible
+            if update.norm(p=2, dim=-1, keepdim=False) < 5e-06:
                 has_converged = True
                 break
         if has_converged:
             break
     else:
-        # If neither learning rate suceeded take the initial mean
+        # If neither learning rate suceeded take the best candidate mean
         print("compute_frechet_mean: No convergence with any learning rate. "
-              "Using initial mean.", flush=True)
-        mean = mean_init
+              "Using the best candidate mean.", flush=True)
     return mean
 
 def center_data(x: torch.Tensor, mean: torch.Tensor, hyperboloid: Hyperboloid) -> torch.Tensor:

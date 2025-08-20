@@ -9,7 +9,7 @@ def test_addition(manifold: Manifold, tolerance: Tuple[float, float],
                   uniform_points: torch.Tensor) -> None:
     """Test addition operation."""
     if isinstance(manifold, Hyperboloid):
-        # The addition operation is not well-defined for the Hyperboloid manifold
+        # Note: The addition operation is not well-defined for the Hyperboloid manifold
         pytest.skip()
     atol, rtol = tolerance
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
@@ -65,7 +65,7 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
         rtol=rtol
     )
     if isinstance(manifold, (Euclidean, PoincareBall)):
-        # Hyperboloid: addition is not well defined
+        # Note: Hyperboloid.addition is not well defined
         n = torch.randint(3, 10, (1,)).item()
         if isinstance(manifold, Hyperboloid):
             n_sum = manifold._create_origin_from_reference(uniform_points)
@@ -86,7 +86,7 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
             atol=atol,
             rtol=rtol
         )
-        # Hyperboloid: -uniform_points are not on the manifold since they are past-pointing
+        # Note: -uniform_points are not on the Hyperboloid manifold since they are past-pointing
         torch.testing.assert_close(
             manifold.scalar_mul(-r1, uniform_points),
             manifold.scalar_mul(r1, -uniform_points),
@@ -134,8 +134,8 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     torch.testing.assert_close(res[0, 1:], torch.zeros_like(res[0, 1:]), atol=atol, rtol=rtol)
     # Stability of multiplication with large scalars
     if isinstance(manifold, (Euclidean, PoincareBall)) or uniform_points.dtype == torch.float64:
-        # Hyperboloid: float32 fails b/c of the numerical instabilities introduced by
-        # the minkowski inner product within the is_in_manifold check
+        # Note: In float32 this check fails b/c of the numerical instabilities introduced by
+        #       the Hyperboloid._minkowski_inner product within the is_in_manifold check
         res = manifold.scalar_mul(r_large, uniform_points)
         assert torch.isfinite(res).all()
         assert manifold.is_in_manifold(res)
@@ -195,27 +195,25 @@ def test_expmap_retraction_logmap(manifold: Manifold, tolerance: Tuple[float, fl
     assert manifold.is_in_tangent_space(v, uniform_points)
     assert manifold.is_in_tangent_space(v0, origin)
     # Numerical stability of expmap/expmap_0/retraction
-    if isinstance(manifold, PoincareBall):
-        # The normal Hyperboloid.exmap and Hyperboloid.exmap_0 do not pass the is_in_manifold check
-        # in float32, only the retraction does. On the other hand, the retraction does not pass the
-        # expmap_0(logmap_0())-check in float64. The convergence, in practice, is much better with
-        # the non-approximated functions, e.g. with horopca we can get ~2x the distortion otherwise.
+    if isinstance(manifold, (Euclidean, PoincareBall)):
+        # Note: In float32 Hyperboloid.exmap/expmap_0 fail the is_in_manifold check
+        #       since the is_in_manifold check is not robust to numerical errors
+        # Expmap
         v_manif = manifold.expmap(v, uniform_points)
         assert torch.isfinite(v_manif).all()
-        assert manifold.is_in_manifold(v_manif) # Normal expmap in float32 violates this check
+        assert manifold.is_in_manifold(v_manif)
+        # Expmap_0
         v0_manif = manifold.expmap_0(v0)
         assert torch.isfinite(v0_manif).all()
-        assert manifold.is_in_manifold(v0_manif) # Normal expmap in float32 violates this check
+        assert manifold.is_in_manifold(v0_manif)
+        # Retraction
         v_manif = manifold.retraction(v, uniform_points)
         assert torch.isfinite(v_manif).all()
-        assert manifold.is_in_manifold(v_manif)
-    v0_manif = manifold.retraction(v0, origin)
-    assert torch.isfinite(v0_manif).all()
-    assert manifold.is_in_manifold(v0_manif)
+        v0_manif = manifold.retraction(v0, origin)
+        assert torch.isfinite(v0_manif).all()
     # Numerical stability of logmap/logmap_0
-    if isinstance(manifold, Hyperboloid):
-        manifold.is_in_tangent_space(manifold.logmap(y, x), x)
-        manifold.is_in_tangent_space(manifold.logmap_0(uniform_points), origin)
+    assert manifold.is_in_tangent_space(manifold.logmap(y, x), x)
+    assert manifold.is_in_tangent_space(manifold.logmap_0(uniform_points), origin)
     # Stability of inverse operations
     # Note: expmap/expmap_0 apply backproj. which is not injective
     res = manifold.expmap(manifold.logmap(y, x), x)
@@ -224,7 +222,7 @@ def test_expmap_retraction_logmap(manifold: Manifold, tolerance: Tuple[float, fl
     res = manifold.expmap_0(manifold.logmap_0(uniform_points))
     assert torch.isfinite(res).all()
     assert manifold.is_in_manifold(res)
-    torch.testing.assert_close(res, uniform_points, atol=atol, rtol=rtol) # Retraction in float64 violates this check
+    torch.testing.assert_close(res, uniform_points, atol=atol, rtol=rtol)
     # Consistency of expmap/logmap with expmap_0/logmap_0
     torch.testing.assert_close(manifold.expmap(v0, origin), manifold.expmap_0(v0), atol=atol, rtol=rtol)
     torch.testing.assert_close(
@@ -242,9 +240,7 @@ def test_ptransp(manifold: Manifold, tolerance: Tuple[float, float],
         origin = manifold._create_origin_from_reference(uniform_points)
     else:
         origin = torch.zeros_like(uniform_points)
-    # Large tangent vectors can lead to numerical instability
-    # -> Riemannian metric may not be preserved when parallel transporting
-    bound = 200
+    bound = 100
     u = torch.empty_like(uniform_points).uniform_(-bound, bound)
     v = torch.empty_like(uniform_points).uniform_(-bound, bound)
     if isinstance(manifold, Hyperboloid):
@@ -312,13 +308,6 @@ def test_gyration(seed: None, manifold: Manifold, tolerance: Tuple[float, float]
         pytest.skip()
     atol, rtol = tolerance
     x, y, z, a = uniform_points.split(uniform_points.shape[0] // 4, dim=0)
-    # Gyration identity - Poincare fails with abs./rel. diff up to 1e-02
-    # torch.testing.assert_close(
-    #     manifold._gyration(x, y, z),
-    #     manifold.addition(-manifold.addition(x, y), manifold.addition(x, manifold.addition(y, z))),
-    #     atol=atol,
-    #     rtol=rtol
-    # )
     # (Gyro-)commutative law
     torch.testing.assert_close(
         manifold.addition(x, y),
