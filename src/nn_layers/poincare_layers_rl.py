@@ -2,7 +2,7 @@ import torch
 
 from .hyperbolic_layers import HyperbolicParametrizedLayer
 from ..manifolds import ManifoldParameter, PoincareBall
-from ..utils.math_utils import arsinh
+from ..utils.math_utils import asinh
 
 
 class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
@@ -96,7 +96,7 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
         # a_norm = a.norm(dim=-1, keepdim=keepdim, p=2)
         # num = 2.0 * sc_diff_a
         # denom =  torch.abs((1 + k * diff_norm2) * a_norm) + 1e-15
-        # distance = arsin_k(num / denom, k)  # geoopt uses arsinh
+        # distance = arsin_k(num / denom, k)  # geoopt uses asinh
         # distance = distance * a_norm
         # return distance
         ######################################################
@@ -108,7 +108,7 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
         a_norm = a.norm(dim=-1, keepdim=True, p=2) # (out_dim, 1)
         num = 2.0 * sc_diff_a # (B, 1, out_dim, 1)
         denom = torch.abs((1 - self.manifold.c * diff_norm2) * a_norm) + 1e-15 # (B, 1, out_dim, 1)
-        signed_distance = arsinh(sqrt_c * num / denom) / sqrt_c # (B, 1, out_dim, 1)
+        signed_distance = asinh(sqrt_c * num / denom) / sqrt_c # (B, 1, out_dim, 1)
         res = signed_distance * a_norm # (B, 1, out_dim, 1)
         return res
 

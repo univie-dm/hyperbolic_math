@@ -2,7 +2,7 @@ import torch
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, artanh, tanh
+from ..utils.math_utils import acosh, atanh, tanh
 
 
 class PoincareBall(Manifold):
@@ -189,12 +189,12 @@ class PoincareBall(Manifold):
         Stability
         ---------
         The PoincareBall multiplication converges towards the tangent space multiplication
-        as the norm of vector(s) x approaches zero, since tanh(z) ~ artanh(z) ~ z for small z.
+        as the norm of vector(s) x approaches zero, since tanh(z) ~ atanh(z) ~ z for small z.
         """
         r, x = self._2manifold_dtype([r, x])
         x_norm = x.norm(p=2, dim=axis, keepdim=True).clamp_min(self.min_enorm)
         c_norm_prod = self.c.sqrt() * x_norm
-        res = tanh(r * artanh(c_norm_prod)) / c_norm_prod * x
+        res = tanh(r * atanh(c_norm_prod)) / c_norm_prod * x
         if backproject:
             res = self.proj(res, axis=axis)
         return res
@@ -246,12 +246,12 @@ class PoincareBall(Manifold):
             num = (y - x).norm(p=2, dim=axis, keepdim=True)
             denom = (1 - 2 * self.c * xy + self.c**2 * x2y2).clamp_min(self.min_enorm).sqrt()
             xysum_norm = num / denom
-            dist_c = artanh(sqrt_c * xysum_norm)
+            dist_c = atanh(sqrt_c * xysum_norm)
             res = 2 * dist_c / sqrt_c
         elif version == "mobius":
             # Mobius distance
             sqrt_c = self.c.sqrt()
-            dist_c = artanh(sqrt_c * self.addition(-x, y, axis=axis, backproject=backproject).norm(p=2, dim=axis, keepdim=True))
+            dist_c = atanh(sqrt_c * self.addition(-x, y, axis=axis, backproject=backproject).norm(p=2, dim=axis, keepdim=True))
             res = 2 * dist_c / sqrt_c
         elif version == "metric_tensor":
             # Metric-tensor induced distance
@@ -260,7 +260,7 @@ class PoincareBall(Manifold):
             xy_diff_sqnorm = (x - y).pow(2).sum(dim=axis, keepdim=True)
             res = 1 + 2 * self.c * xy_diff_sqnorm / ((1 - self.c * x_sqnorm) * (1 - self.c * y_sqnorm))
             condition = res < 1 + self.min_enorm
-            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
+            res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
         else:
             raise ValueError(f"Unknown version: {version}")
         return res
@@ -299,14 +299,14 @@ class PoincareBall(Manifold):
         if version in ["mobius_direct", "mobius"]:
             # (Direct) Mobius distance
             sqrt_c = self.c.sqrt()
-            dist_c = artanh(sqrt_c * x.norm(p=2, dim=axis, keepdim=True))
+            dist_c = atanh(sqrt_c * x.norm(p=2, dim=axis, keepdim=True))
             res = 2 * dist_c / sqrt_c
         elif version == "metric_tensor":
             # Metric-tensor induced distance
             x_sqnorm = x.pow(2).sum(dim=axis, keepdim=True)
             res = 1 + 2 * self.c * x_sqnorm / (1 - self.c * x_sqnorm)
             condition = res < 1 + self.min_enorm
-            res = torch.where(condition, torch.zeros_like(res), arcosh(res) / self.c.sqrt())
+            res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
         else:
             raise ValueError(f"Unknown version: {version}")
         return res
@@ -451,7 +451,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         logmap converges towards the identity map as the norm of vector(s) y-x approaches zero,
-        since artanh(z) ~ z for small z.
+        since atanh(z) ~ z for small z.
         self._lambda() is roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
         """
         y, x = self._2manifold_dtype([y, x])
@@ -462,7 +462,7 @@ class PoincareBall(Manifold):
         denom = (1 - 2 * self.c * xy + self.c**2 * x2y2).clamp_min(self.min_enorm).sqrt()
         sub_norm = num / denom
         c_norm_prod = (self.c.sqrt() * sub_norm).clamp_min(self.min_enorm)
-        res = 2 * artanh(c_norm_prod) / (c_norm_prod * self._lambda(x, axis=axis)) * sub
+        res = 2 * atanh(c_norm_prod) / (c_norm_prod * self._lambda(x, axis=axis)) * sub
         return res
 
     def logmap_0(self, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
@@ -493,12 +493,12 @@ class PoincareBall(Manifold):
         Stability
         ---------
         logmap_0 converges towards the identity map as the norm of vector(s) y approaches zero,
-        since artanh(z) ~ z for small z.
+        since atanh(z) ~ z for small z.
         """
         y, = self._2manifold_dtype([y])
         y_norm = y.norm(p=2, dim=axis, keepdim=True)
         c_norm_prod = (self.c.sqrt() * y_norm).clamp_min(self.min_enorm)
-        res = artanh(c_norm_prod) / c_norm_prod * y
+        res = atanh(c_norm_prod) / c_norm_prod * y
         return res
 
     def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:

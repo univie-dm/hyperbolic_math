@@ -2,7 +2,7 @@ import torch
 
 from .hyperbolic_layers import HyperbolicParametrizedLayer
 from ..manifolds import ManifoldParameter, PoincareBall
-from ..utils.math_utils import arsinh, sinh, cosh
+from ..utils.math_utils import asinh, sinh, cosh
 
 
 class HyperbolicRegressionPoincare(HyperbolicParametrizedLayer):
@@ -80,7 +80,7 @@ class HyperbolicRegressionPoincare(HyperbolicParametrizedLayer):
         sub = self.manifold.addition(-p.T.unsqueeze(0), x.unsqueeze(-1), axis=1, backproject=self.backproject) # (B, in_dim, out_dim)
         suba = (sub * a.T).sum(dim=1, keepdim=True) # (B, 1, out_dim)
         a_norm = a.norm(p=2, dim=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm).T # (1, out_dim)
-        signed_dist2hyp = arsinh(sqrt_c * self.manifold._lambda(sub, axis=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
+        signed_dist2hyp = asinh(sqrt_c * self.manifold._lambda(sub, axis=1) * suba / a_norm) / sqrt_c # (B, 1, out_dim)
         res = self.manifold._lambda(p, axis=self.hyperbolic_axis).T * a_norm * signed_dist2hyp.squeeze(1) # (B, out_dim)
         return res
 
@@ -150,8 +150,8 @@ class PoincareBaseLayerPP(HyperbolicParametrizedLayer):
         z_norm = z.norm(p=2, dim=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm) # (out_dim, 1)
         lambda_x = self.manifold._lambda(x, axis=self.hyperbolic_axis) # (B, 1)
         z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
-        arsinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
-        signed_dist2hyp = arsinh(arsinh_arg) / sqrt_c # (B, out_dim)
+        asinh_arg = (1-lambda_x) * sinh(sqrt_c2r) + sqrt_c * lambda_x * cosh(sqrt_c2r) * z_unitx # (B, out_dim)
+        signed_dist2hyp = asinh(asinh_arg) / sqrt_c # (B, out_dim)
         res = 2 * z_norm.T * signed_dist2hyp # (B, out_dim)
         return res
 

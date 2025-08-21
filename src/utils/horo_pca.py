@@ -183,8 +183,7 @@ class HoroPCA(nn.Module):
         # Compute the tangent vectors of the hyperboloid with base point spine_proj that are pointing
         # towards hyperboloid_origin, are tangent to the target submanifold, and are orthogonal to the spine
         # Note: We orthogonalize the origin to the spine instead of the chords to save compute
-        hyperboloid_origin = torch.zeros_like(spine_proj)
-        hyperboloid_origin[:,0] = 1 / self.hyperboloid.c.sqrt()
+        hyperboloid_origin = self.hyperboloid._create_origin_from_reference(spine_proj)
         originBQt = self.hyperboloid._minkowski_inner(hyperboloid_origin.unsqueeze(-1), Q.T.unsqueeze(0), axis=1).squeeze(1)
         origin_coeffs = originBQt @ QBQt_inverse
         tangents = hyperboloid_origin - (origin_coeffs @ Q)

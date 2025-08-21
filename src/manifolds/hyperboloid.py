@@ -3,7 +3,7 @@ import torch
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import arcosh, cosh, sinh, smooth_clamp_min, smooth_clamp_max, smooth_clamp
+from ..utils.math_utils import acosh, cosh, sinh
 
 
 class Hyperboloid(Manifold):
@@ -106,7 +106,7 @@ class Hyperboloid(Manifold):
             Advances in neural information processing systems 32 (2019).
         """
         x, = self._2manifold_dtype([x])
-        res = self._minkowski_inner(x, x, axis=axis).clamp_min(0.).sqrt() # TODO: smooth clamp??
+        res = self._minkowski_inner(x, x, axis=axis).clamp_min(0.).sqrt()
         return res
 
     def _create_origin_from_reference(self, reference_tensor: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -184,7 +184,7 @@ class Hyperboloid(Manifold):
             Advances in neural information processing systems 32 (2019).
         """
         x, y = self._2manifold_dtype([x, y])
-        res = arcosh(-self.c * self._minkowski_inner(x, y, axis=axis)) / self.c.sqrt()
+        res = acosh(-self.c * self._minkowski_inner(x, y, axis=axis)) / self.c.sqrt()
         return res
 
     def dist_0(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
@@ -210,7 +210,7 @@ class Hyperboloid(Manifold):
         """
         x, = self._2manifold_dtype([x])
         x0 = x.narrow(axis, 0, 1)
-        res = arcosh(self.c.sqrt() * x0) / self.c.sqrt()
+        res = acosh(self.c.sqrt() * x0) / self.c.sqrt()
         return res
 
     def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True,

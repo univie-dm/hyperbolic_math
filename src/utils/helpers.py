@@ -99,7 +99,7 @@ def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, versio
     # TODO: Scale with best possible delta
     #eps = torch.finfo(points.dtype).eps
     #best_possible_delta = (8*(1-eps)**2)/((1-(1-eps)**2)**2)
-    #best_possible_delta = arcosh(best_possible_delta+1)
+    #best_possible_delta = acosh(best_possible_delta+1)
     #best_possible_delta = 2*torch.log(1+2**0.5)/best_possible_delta
     #relative_delta -= best_possible_delta
     return delta, diam, rel_delta
