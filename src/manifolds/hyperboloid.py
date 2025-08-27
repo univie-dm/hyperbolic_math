@@ -191,6 +191,7 @@ class Hyperboloid(Manifold):
         x, y = self._2manifold_dtype([x, y])
         acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
         if version == "smoothened":
+            #acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
             #TODO: check if max clamping is reasonable for performance
             eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
             clamp = float(math.log(2 / eps))
@@ -228,6 +229,7 @@ class Hyperboloid(Manifold):
         x0 = x.narrow(axis, 0, 1)
         acosh_arg = self.c.sqrt() * x0
         if version == "smoothened":
+            #acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
             #TODO: check if max clamping is reasonable for performance
             eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
             clamp = float(math.log(2 / eps))

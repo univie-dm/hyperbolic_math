@@ -74,14 +74,10 @@ def tanh(x: torch.Tensor) -> torch.Tensor:
         #print(f"tanh: {num_mismatches} mismatches", flush=True)
     return torch.tanh(x)
 
-#@torch.jit.script
-#TODO: test against HoroPCA
+@torch.jit.script
 def acosh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic cosine. Domain=[1, inf)."""
-    eps = _get_tensor_eps(x)
-    clamp = float(math.log(2 / eps))
-    #x = x.clamp_min(1.0)
-    x = x.clamp(1.0, clamp)
+    x = x.clamp_min(1.0)
     return torch.acosh(x)
 
 @torch.jit.script
