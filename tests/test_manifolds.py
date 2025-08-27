@@ -158,7 +158,7 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     assert torch.isfinite(manifold.dist_0(x)).all()
     # Reflexivity
     torch.testing.assert_close(
-        manifold.dist(uniform_points, uniform_points)+1,
+        manifold.dist(uniform_points, uniform_points, version="normal")+1 if isinstance(manifold, Hyperboloid) else manifold.dist(uniform_points, uniform_points)+1,
         torch.ones((uniform_points.shape[0], 1), dtype=uniform_points.dtype),
         atol=atol,
         rtol=rtol
@@ -169,8 +169,8 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z) + atol)
     # Consistency of dist with dist_0
     torch.testing.assert_close(
-        manifold.dist(uniform_points, origin),
-        manifold.dist_0(uniform_points),
+        manifold.dist(uniform_points, origin, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(uniform_points, origin),
+        manifold.dist_0(uniform_points, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist_0(uniform_points),
         atol=atol,
         rtol=rtol
     )
@@ -287,13 +287,13 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
         origin = torch.zeros_like(uniform_points)
     # Consistency of tangent_norm with logmap/logmap_0 and dist/dist_0
     torch.testing.assert_close(
-        manifold.dist(x, y),
+        manifold.dist(x, y, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y),
         manifold.tangent_norm(manifold.logmap(y, x), x),
         atol=atol,
         rtol=rtol
     )
     torch.testing.assert_close(
-        manifold.dist_0(uniform_points),
+        manifold.dist_0(uniform_points, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist_0(uniform_points),
         manifold.tangent_norm(manifold.logmap_0(uniform_points), origin),
         atol=atol,
         rtol=rtol

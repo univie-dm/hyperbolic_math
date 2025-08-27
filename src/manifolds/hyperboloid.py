@@ -3,7 +3,7 @@ import torch
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import acosh, cosh, sinh
+from ..utils.math_utils import acosh, cosh, sinh, smooth_clamp
 
 
 class Hyperboloid(Manifold):
@@ -156,11 +156,11 @@ class Hyperboloid(Manifold):
         r, x = self._2manifold_dtype([r, x])
         log0_x = self.logmap_0(x, axis=axis)
         unit_tangent = log0_x / (self._minkowski_inner(log0_x, log0_x, axis=axis).sqrt()).clamp_min(self.min_enorm)
-        tangent = r * self.dist_0(x, axis=axis) * unit_tangent
+        tangent = r * self.dist_0(x, axis=axis, version="normal") * unit_tangent
         res = self.expmap_0(tangent, axis=axis, backproject=backproject)
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, version: str="smoothened") -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Hyperboloid point(s) x and y.
 
@@ -172,6 +172,11 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
+        version : str
+            Version of the geodesic distance to compute (default: "smoothened")
+            ['normal': Normal geodesic distance,
+             'smoothened': Smoothly clamps the arcosh input before
+                           computing the geodesic distance (better convergence)]
 
         Returns
         -------
@@ -184,10 +189,16 @@ class Hyperboloid(Manifold):
             Advances in neural information processing systems 32 (2019).
         """
         x, y = self._2manifold_dtype([x, y])
-        res = acosh(-self.c * self._minkowski_inner(x, y, axis=axis)) / self.c.sqrt()
+        acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
+        if version == "smoothened":
+            #TODO: check if max clamping is reasonable for performance
+            eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
+            clamp = float(math.log(2 / eps))
+            acosh_arg = smooth_clamp(acosh_arg, 1.0, clamp)
+        res = acosh(acosh_arg) / self.c.sqrt()
         return res
 
-    def dist_0(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str="smoothened") -> torch.Tensor:
         """
         Compute the geodesic distance(s) of Hyperboloid point(s) x from/to the Hyperboloid origin.
 
@@ -197,6 +208,11 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
+        version : str
+            Version of the geodesic distance to compute (default: "smoothened")
+            ['normal': Normal geodesic distance,
+             'smoothened': Smoothly clamps the arcosh input before
+                           computing the geodesic distance (better convergence)]
 
         Returns
         -------
@@ -210,11 +226,16 @@ class Hyperboloid(Manifold):
         """
         x, = self._2manifold_dtype([x])
         x0 = x.narrow(axis, 0, 1)
-        res = acosh(self.c.sqrt() * x0) / self.c.sqrt()
+        acosh_arg = self.c.sqrt() * x0
+        if version == "smoothened":
+            #TODO: check if max clamping is reasonable for performance
+            eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
+            clamp = float(math.log(2 / eps))
+            acosh_arg = smooth_clamp(acosh_arg, 1.0, clamp)
+        res = acosh(acosh_arg) / self.c.sqrt()
         return res
 
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True,
-               version: str="normal") -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at Hyperboloid point(s) x to the Hyperboloid.
         [Exponential map]
@@ -241,26 +262,14 @@ class Hyperboloid(Manifold):
             Advances in neural information processing systems 32 (2019).
         """
         v, x = self._2manifold_dtype([v, x])
-        # TODO: check if Taylor expansion has any advantages in real world applications
-        if version[:-2] == "Taylor": # e.g. "Taylor 4" for degree 4 approx.
-            degree = int(version[-1])
-            scale = self.c * self._minkowski_inner(v, v, axis=axis)
-            res = torch.zeros_like(x)
-            for n in range(degree):
-                scale_n = scale ** n / math.factorial(2*n)
-                term = x + v / (2*n+1)
-                res = res + scale_n * term
-        else:
-            # Normal expmap
-            v_norm = self._minkowski_norm(v, axis=axis)
-            c_norm_prod = self.c.sqrt() * v_norm
-            res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm) * v
+        v_norm = self._minkowski_norm(v, axis=axis)
+        c_norm_prod = self.c.sqrt() * v_norm
+        res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm) * v
         if backproject:
             res = self.proj(res, axis=axis)
         return res
 
-    def expmap_0(self, v: torch.Tensor, axis: int=-1, backproject: bool=True,
-                 version: str="normal") -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map tangent vector(s) v at the Hyperboloid origin to the Hyperboloid.
         [Exponential map]
@@ -285,24 +294,12 @@ class Hyperboloid(Manifold):
             Advances in neural information processing systems 32 (2019).
         """
         v, = self._2manifold_dtype([v])
-        # TODO: check if Taylor expansion has any advantages in real world applications
-        if version[:-2] == "Taylor": # e.g. "Taylor 4" for degree 4 approx.
-            degree = int(version[-1])
-            origin = self._create_origin_from_reference(v, axis=axis)
-            scale = self.c * self._minkowski_inner(v, v, axis=axis)
-            res = torch.zeros_like(origin)
-            for n in range(degree):
-                scale_n = scale ** n / math.factorial(2*n)
-                term = origin + v / (2*n+1)
-                res = res + scale_n * term
-        else:
-            # Normal expmap_0
-            v_norm = self._minkowski_norm(v, axis=axis)
-            c_norm_prod = self.c.sqrt() * v_norm
-            sinh_scale = sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm)
-            res0 = cosh(c_norm_prod) / self.c.sqrt() + sinh_scale * v.narrow(axis, 0, 1)
-            res_rem = sinh_scale * v.narrow(axis, 1, v.shape[axis]-1)
-            res = torch.cat((res0, res_rem), dim=axis)
+        v_norm = self._minkowski_norm(v, axis=axis)
+        c_norm_prod = self.c.sqrt() * v_norm
+        sinh_scale = sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm)
+        res0 = cosh(c_norm_prod) / self.c.sqrt() + sinh_scale * v.narrow(axis, 0, 1)
+        res_rem = sinh_scale * v.narrow(axis, 1, v.shape[axis]-1)
+        res = torch.cat((res0, res_rem), dim=axis)
         if backproject:
             res = self.proj(res, axis=axis)
         return res

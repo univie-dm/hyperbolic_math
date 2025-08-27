@@ -1,11 +1,11 @@
 import torch
 
-from .hyperbolic_layers import HyperbolicParametrizedLayer
+from .helpers import get_torch_dtype
 from ..manifolds import ManifoldParameter, PoincareBall
 from ..utils.math_utils import asinh
 
 
-class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
+class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
     """
     Module to compute the 'Hyperbolic Deep Reinforcement Learning' multinomial linear regression score(s):
         0) Project the input tensor onto the manifold (optional)
@@ -14,7 +14,7 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
     Parameters
     ----------
     manifold : PoincareBall
-        The hyperbolic manifold (needs to be PoincareBall)
+        The PoincareBall manifold
     input_dim : int
         Dimension of the input space
     output_dim : int
@@ -53,11 +53,28 @@ class HyperbolicRegressionPoincareHDRL(HyperbolicParametrizedLayer):
         input_space: str = "manifold",
         version: str = "standard"
     ):
-        assert isinstance(manifold, PoincareBall), "Manifold must be an instance of PoincareBall."
-        super().__init__(manifold, input_dim, output_dim, hyperbolic_axis, backproject, params_dtype, requires_grad, input_space)
+        super().__init__()
+        assert isinstance(manifold, PoincareBall), "manifold must be an instance of PoincareBall"
+        assert hyperbolic_axis == -1, "hyperbolic_axis must be -1, reshape your tensor accordingly."
+        self.manifold = manifold
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hyperbolic_axis = hyperbolic_axis
+        self.backproject = backproject
 
+        self.params_dtype = get_torch_dtype(params_dtype)
+        if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
+            print(f"Warning: HyperbolicLayer.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
+                  f"All manifold operations will be performed in lower precision {manifold.dtype}!")
+
+        self.requires_grad = requires_grad
+        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
+        self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
         bias = torch.zeros((self.output_dim, self.input_dim), dtype=self.params_dtype)
         self.bias = ManifoldParameter(bias, requires_grad=self.requires_grad, manifold=self.manifold)
+
+        assert input_space in ["tangent", "manifold"], "input_space must be either 'tangent' or 'manifold'"
+        self.input_space = input_space
 
         assert version in ["standard", "rs"], "version must be either 'standard' or 'rs'"
         self.version = "forward_rs" if version == "rs" else "forward"

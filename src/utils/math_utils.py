@@ -4,13 +4,7 @@ import math
 import torch
 
 
-VERSION_SMOOTH = "classic"
-# "classic":         small range,    sharp clamps
-# "classic_smooth":  small range,    original clamps
-# "extended":        extended range, sharp clamps
-# "extended_smooth": extended range, smooth clamps
-
-#@torch.jit.script
+@torch.jit.script
 def _get_tensor_eps(
     x: torch.Tensor,
     eps32: float = torch.finfo(torch.float32).eps,
@@ -23,134 +17,86 @@ def _get_tensor_eps(
     else:
         raise RuntimeError(f"Expected x to be floating-point, got {x.dtype}")
 
-#@torch.jit.script
-def smooth_clamp_min(x: torch.Tensor, min_value: float) -> torch.Tensor:
+@torch.jit.script
+def smooth_clamp_min(x: torch.Tensor, min_value: float, smoothing_factor: float=50) -> torch.Tensor:
     """Smoothly clamp tensor values to a minimum."""
     eps = _get_tensor_eps(x)
     shift = min_value + eps
-    x_clamped = shift + torch.nn.functional.softplus(x - shift, beta=100.0)
+    x_clamped = shift + torch.nn.functional.softplus(x - shift, beta=smoothing_factor)
     return torch.where(x < shift, x_clamped, x)
 
-#@torch.jit.script
-def smooth_clamp_max(x: torch.Tensor, max_value: float) -> torch.Tensor:
+@torch.jit.script
+def smooth_clamp_max(x: torch.Tensor, max_value: float, smoothing_factor: float=50) -> torch.Tensor:
     """Smoothly clamp tensor values to a maximum."""
     eps = _get_tensor_eps(x)
     shift = max_value - eps
-    x_clamped = shift - torch.nn.functional.softplus(shift - x, beta=100.0)
+    x_clamped = shift - torch.nn.functional.softplus(shift - x, beta=smoothing_factor)
     return torch.where(x > shift, x_clamped, x)
 
-#@torch.jit.script
-def smooth_clamp(x: torch.Tensor, min_value: float, max_value: float) -> torch.Tensor:
+@torch.jit.script
+def smooth_clamp(x: torch.Tensor, min_value: float, max_value: float, smoothing_factor: float=50) -> torch.Tensor:
     """Smoothly clamp tensor values to a range [min_value, max_value]."""
-    return smooth_clamp_min(smooth_clamp_max(x, max_value), min_value)
+    x = smooth_clamp_max(x, max_value, smoothing_factor=smoothing_factor)
+    return smooth_clamp_min(x, min_value, smoothing_factor=smoothing_factor)
 
-#@torch.jit.script
+@torch.jit.script
+#TODO: test if this even makes a diff for clustering
 def cosh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic cosine. Domain=(-inf, inf)."""
-    if VERSION_SMOOTH == "classic":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.cosh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "classic_smooth":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.cosh(smooth_clamp(x, -clamp, clamp))
-    elif VERSION_SMOOTH == "extended":
-        # Practical limits: float32 ~88.0, float64 ~709.0
-        clamp = 88.0 if x.dtype == torch.float32 else 709.0
-        return torch.cosh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "extended_smooth":
-        # Practical limits: float32 ~88.0, float64 ~709.0
-        clamp = 88.0 if x.dtype == torch.float32 else 709.0
-        return torch.cosh(smooth_clamp(x, -clamp, clamp))
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    #clamp = 88.0 if x.dtype == torch.float32 else 709.0
+    x = smooth_clamp(x, -clamp, clamp)
+    #x = x.clamp(-clamp, clamp)
+    return torch.cosh(x)
 
-#@torch.jit.script
+@torch.jit.script
+#TODO: test if this even makes a diff for clustering
 def sinh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic sine. Domain=(-inf, inf)."""
-    if VERSION_SMOOTH == "classic":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.sinh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "classic_smooth":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.sinh(smooth_clamp(x, -clamp, clamp))
-    elif VERSION_SMOOTH == "extended":
-        # Practical limits: float32 ~88.0, float64 ~709.0
-        clamp = 88.0 if x.dtype == torch.float32 else 709.0
-        return torch.sinh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "extended_smooth":
-        # Practical limits: float32 ~88.0, float64 ~709.0
-        clamp = 88.0 if x.dtype == torch.float32 else 709.0
-        return torch.sinh(smooth_clamp(x, -clamp, clamp))
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    #clamp = 88.0 if x.dtype == torch.float32 else 709.0
+    x = smooth_clamp(x, -clamp, clamp)
+    #x = x.clamp(-clamp, clamp)
+    return torch.sinh(x)
 
 #@torch.jit.script
+#TODO: test if clamping happens in the best run
 def tanh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic tangent. Domain=(-inf, inf)."""
-    if VERSION_SMOOTH == "classic":
-        eps = _get_tensor_eps(x)
-        clamp = float(-math.log(eps / 2) / 2)
-        return torch.tanh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "classic_smooth":
-        eps = _get_tensor_eps(x)
-        clamp = float(-math.log(eps / 2) / 2)
-        return torch.tanh(smooth_clamp(x, -clamp, clamp))
-    elif VERSION_SMOOTH == "extended":
-        # Can possibly be extended if nan?
-        return torch.tanh(x)
-    elif VERSION_SMOOTH == "extended_smooth":
-        # Can possibly be extended if nan?
-        return torch.tanh(x)
+    eps = _get_tensor_eps(x)
+    clamp = float(-math.log(eps / 2) / 2)
+    x_temp = smooth_clamp(x, -clamp, clamp)
+    num_mismatches = torch.sum(x != x_temp).item()
+    if num_mismatches > 0:
+        pass
+        #print(f"tanh: {num_mismatches} mismatches", flush=True)
+    return torch.tanh(x)
 
 #@torch.jit.script
+#TODO: test against HoroPCA
 def acosh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic cosine. Domain=[1, inf)."""
-    if VERSION_SMOOTH == "classic":
-        print("classic", flush=True)
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.acosh(x.clamp(1.0, clamp))
-    elif VERSION_SMOOTH == "classic_smooth":
-        print("classic_smooth", flush=True)
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.acosh(smooth_clamp(x, 1.0, clamp))
-    elif VERSION_SMOOTH == "extended":
-        print("extended", flush=True)
-        # Can possibly be extended if nan?
-        return torch.acosh(x.clamp_min(1.0))
-    elif VERSION_SMOOTH == "extended_smooth":
-        print("extended_smooth", flush=True)
-        # Can possibly be extended if nan?
-        return torch.acosh(smooth_clamp_min(x, 1.0))
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    #x = x.clamp_min(1.0)
+    x = x.clamp(1.0, clamp)
+    return torch.acosh(x)
 
-#@torch.jit.script
+@torch.jit.script
 def asinh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic sine. Domain=(-inf, inf)."""
-    if VERSION_SMOOTH == "classic":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.asinh(x.clamp(-clamp, clamp))
-    elif VERSION_SMOOTH == "classic_smooth":
-        eps = _get_tensor_eps(x)
-        clamp = float(math.log(2 / eps))
-        return torch.asinh(smooth_clamp(x, -clamp, clamp))
-    elif VERSION_SMOOTH == "extended":
-        # Can possibly be extended if nan?
-        return torch.asinh(x)
-    elif VERSION_SMOOTH == "extended_smooth":
-        # Can possibly be extended if nan?
-        return torch.asinh(x)
+    eps = _get_tensor_eps(x)
+    clamp = float(math.log(2 / eps))
+    x = smooth_clamp(x, -clamp, clamp)
+    return torch.asinh(x)
 
 #@torch.jit.script
+#TODO: check if smooth clamping has an impact on performance against best run
 def atanh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic tangent. Domain=(-1, 1)."""
     eps = _get_tensor_eps(x)
-    if VERSION_SMOOTH == "classic":
-        return torch.atanh(x.clamp(-1 + eps, 1 - eps))
-    elif VERSION_SMOOTH == "classic_smooth":
-        return torch.atanh(smooth_clamp(x, -1 + eps, 1 - eps))
-    elif VERSION_SMOOTH == "extended":
-        return torch.atanh(x.clamp(-1 + eps, 1 - eps))
-    elif VERSION_SMOOTH == "extended_smooth":
-        return torch.atanh(smooth_clamp(x, -1 + eps, 1 - eps))
+    #x = smooth_clamp(x, -1 + eps, 1 - eps)
+    x = x.clamp(-1 + eps, 1 - eps)
+    return torch.atanh(x)
