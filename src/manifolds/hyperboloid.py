@@ -174,7 +174,7 @@ class Hyperboloid(Manifold):
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
             ['normal':     Normal geodesic distance,
-             'smoothened': Smoothly clamps the arcosh input before
+             'smoothened': Smoothly clamps the acosh input before
                            computing the geodesic distance (better convergence)]
 
         Returns
@@ -207,7 +207,7 @@ class Hyperboloid(Manifold):
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
             ['normal':     Normal geodesic distance,
-             'smoothened': Smoothly clamps the arcosh input before
+             'smoothened': Smoothly clamps the acosh input before
                            computing the geodesic distance (better convergence)]
 
         Returns
