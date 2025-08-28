@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .helpers import compute_pairwise_distances
-from .math_utils import cosh, sinh
+from .helpers import compute_smoothed_pairwise_distances
 from ..manifolds import Manifold, PoincareBall, Hyperboloid
 
 
@@ -31,24 +30,24 @@ def compute_frechet_mean(x: torch.Tensor, hyperboloid: Hyperboloid) -> torch.Ten
     has_converged = False
     batch_size = x.shape[0]
     # Try multiple learning rates
-    for lr in [1e-01, 2e-01, 5e-02, 4e-01, 2.5e-02]:
+    for lr in [1e-02, 2e-02, 5e-03, 4e-02, 2.5e-03]:
         mean = mean_init
         for _ in range(5_000):
             # Compute the logarithmic map of x with respect to the current mean
             log_x = torch.sum(hyperboloid.logmap(x, mean), dim=0, keepdim=True)
-            grad = log_x / batch_size
+            update = lr * log_x / batch_size
             # Update the mean using the exponential map
-            mean = hyperboloid.expmap(lr * grad, mean)
-            if grad.norm(p=2, dim=-1, keepdim=False) < 5e-07:
+            mean = hyperboloid.expmap(update, mean)
+            # Stop if the update has become negligible
+            if update.norm(p=2, dim=-1, keepdim=False) < 5e-06:
                 has_converged = True
                 break
         if has_converged:
             break
     else:
-        # If neither learning rate suceeded take the initial mean
+        # If neither learning rate suceeded take the best candidate mean
         print("compute_frechet_mean: No convergence with any learning rate. "
-              "Using initial mean.", flush=True)
-        mean = mean_init
+              "Using the best candidate mean.", flush=True)
     return mean
 
 def center_data(x: torch.Tensor, mean: torch.Tensor, hyperboloid: Hyperboloid) -> torch.Tensor:
@@ -179,22 +178,20 @@ class HoroPCA(nn.Module):
         x_coeffs = xBQt @ QBQt_inverse
         # 2) Compute the orthogonal geodesic projection onto the spine
         mink_proj = x_coeffs @ Q
-        mink_proj_norm = (-self.hyperboloid.c * self.hyperboloid._minkowski_inner(mink_proj, mink_proj)).sqrt()
-        spine_proj = mink_proj / mink_proj_norm
+        mink_proj_normalized = (-self.hyperboloid.c * self.hyperboloid._minkowski_inner(mink_proj, mink_proj)).sqrt()
+        spine_proj = mink_proj / mink_proj_normalized
         # Compute the tangent vectors of the hyperboloid with base point spine_proj that are pointing
         # towards hyperboloid_origin, are tangent to the target submanifold, and are orthogonal to the spine
         # Note: We orthogonalize the origin to the spine instead of the chords to save compute
-        hyperboloid_origin = torch.zeros_like(spine_proj)
-        hyperboloid_origin[:,0] = 1 / self.hyperboloid.c.sqrt()
+        hyperboloid_origin = self.hyperboloid._create_origin_from_reference(spine_proj)
         originBQt = self.hyperboloid._minkowski_inner(hyperboloid_origin.unsqueeze(-1), Q.T.unsqueeze(0), axis=1).squeeze(1)
         origin_coeffs = originBQt @ QBQt_inverse
         tangents = hyperboloid_origin - (origin_coeffs @ Q)
-        # Assign the tangent vectors unit speed and map them to the Hyperboloid via the exponential map such
-        # that the horospherical projection of x is at distance 'spine_dist' apart from the original point x
+        # Assign the tangent vectors the correct speed such that by mapping them to the Hyperboloid via the exponential map
+        # the horospherical projection of x is at distance 'spine_dist' apart from the original point x
         unit_tangents = tangents / self.hyperboloid._minkowski_inner(tangents, tangents).sqrt()
-        cspine_dist = self.hyperboloid.dist(x, spine_proj) * self.hyperboloid.c.sqrt()
-        res = cosh(cspine_dist) * spine_proj + sinh(cspine_dist) * unit_tangents / self.hyperboloid.c.sqrt()
-        res = self.hyperboloid.proj(res)
+        tangents = self.hyperboloid.dist(x, spine_proj) * unit_tangents
+        res = self.hyperboloid.expmap(tangents, spine_proj)
         return res
 
     def compute_loss(self, x: torch.Tensor) -> torch.Tensor:
@@ -218,7 +215,7 @@ class HoroPCA(nn.Module):
         # Project x onto the submanifold spanned by the Hyperboloid's principal components
         x_proj = self._horo_projection(x, hyperboloid_ideals)
         # Compute the pairwise distances directly in the Hyperboloid
-        distances = compute_pairwise_distances(x_proj, self.hyperboloid)
+        distances = compute_smoothed_pairwise_distances(x_proj, self.hyperboloid)
         # Compute the biased generalized variance of the projected points
         var = torch.mean(distances ** 2)
         return -var
@@ -233,7 +230,6 @@ class HoroPCA(nn.Module):
         x : torch.Tensor
             Manifold point(s) of shape (n_samples, n_in_features)
         """
-        assert self.manifold.is_in_manifold(x), "Input points must be in the manifold of the model."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
         # Compute the Frechet mean of the data points
@@ -268,7 +264,6 @@ class HoroPCA(nn.Module):
         res : torch.Tensor (dtype=self.manifold.dtype)
             The projected PoincareBall point(s) of shape (n_samples, self.n_components)
         """
-        assert self.manifold.is_in_manifold(x), "Input points must be in the same manifold that was used during fit()."
         if isinstance(self.manifold, PoincareBall):
             x = self.manifold.to_hyperboloid(x)
         if recompute_mean or self.data_mean is None:

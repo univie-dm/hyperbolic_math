@@ -218,7 +218,7 @@ class Euclidean(Manifold):
         res = x + v
         return res
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map Euclidean manifold point(s) y to the tangent space(s) of Euclidean manifold point(s) x.
         [Logarithmic map]
@@ -231,7 +231,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int (ignored)
             Axis along which to compute the logarithmic map (default: -1)
-        Note: Axis is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        backproject : bool (ignored)
+            Whether to project results back to the tangent space(s) of x (default: True)
+        Note: Axis and backproject are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -242,7 +244,7 @@ class Euclidean(Manifold):
         res = y - x
         return res
 
-    def logmap_0(self, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Map Euclidean manifold point(s) y to the tangent space of the Euclidean origin.
         [Logarithmic map]
@@ -253,7 +255,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int (ignored)
             Axis along which to compute the logarithmic map (default: -1)
-        Note: Axis is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        backproject : bool (ignored)
+            Whether to project results back to the tangent space of the Euclidean origin (default: True)
+        Note: Axis and backproject are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -264,7 +268,7 @@ class Euclidean(Manifold):
         res = y
         return res
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space(s) of Euclidean
         manifold point(s) x to the tangent space(s) of Euclidean manifold point(s) y.
@@ -279,7 +283,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int (ignored)
             Axis along which to compute the parallel transport (default: -1)
-        Note: Axis is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        backproject : bool (ignored)
+            Whether to project results back to the tangent space(s) of y (default: True)
+        Note: Axis and backproject are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -290,7 +296,7 @@ class Euclidean(Manifold):
         res = v
         return res
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space of
         the Euclidean origin to the tangent space(s) of Euclidean manifold point(s) y.
@@ -303,7 +309,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int (ignored)
             Axis along which to compute the parallel transport (default: -1)
-        Note: Axis is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        backproject : bool (ignored)
+            Whether to project results back to the tangent space(s) of y (default: True)
+        Note: Axis and backproject are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -403,6 +411,29 @@ class Euclidean(Manifold):
         """
         x, = self._2manifold_dtype([x])
         res = x
+        return res
+
+    def tangent_proj(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1):
+        """
+        Project point(s) v onto the tangent space(s) of Euclidean manifold point(s) x.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Point(s)
+        x : torch.Tensor
+            Euclidean manifold point(s)
+        axis : int (ignored)
+            Axis along which to compute the projection (default: -1)
+        Note: Axis is not used in the Euclidean manifold, but included for consistency with other manifolds.
+
+        Returns
+        -------
+        res : torch.Tensor (dtype=self.dtype)
+            The projected tangent vector(s)
+        """
+        v, = self._2manifold_dtype([v])
+        res = v
         return res
 
     def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:

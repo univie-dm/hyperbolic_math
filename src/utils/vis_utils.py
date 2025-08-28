@@ -37,7 +37,7 @@ def create_figure(points: torch.Tensor,
         Dictionary of settings for the visualization.
         If not provided, the following default settings are used:
         - "plot_manifold_dtype": torch.float64 (Data type for plotting)
-        - "dim_red_method": "tangent PCA" {"HoroPCA", "tangent PCA"} (Dimensionality reduction method)
+        - "dim_red_method": "HoroPCA" {"HoroPCA", "tangent PCA"} (Dimensionality reduction method)
         - "title": "Hyperbolic Embeddings" (Title of the plot)
         - "show_origin": True (Whether to show the origin)
         - "save_figure": False (Whether to save the figure or return it)
@@ -81,10 +81,10 @@ def create_figure(points: torch.Tensor,
     points = points.detach()
     assert _manifold.is_in_manifold(points), "Points are not in the manifold"
     if isinstance(_manifold, PoincareBall) and points.shape[-1] > 2:
-        points = to_hyperboloid_vis(points, poincare)
+        points = poincare.to_hyperboloid(points)
         if hyperplanes is not None:
-            hyperplanes = (to_hyperboloid_vis(hyperplanes[0], poincare),
-                           to_hyperboloid_vis(hyperplanes[1], poincare))
+            hyperplanes = (poincare.to_hyperboloid(hyperplanes[0]),
+                           poincare.to_hyperboloid(hyperplanes[1]))
         points, hyperplanes = pointsTo2dPoincare(points, poincare, hyperplanes, settings)
         ax.set_title(f"{settings['title']} ({settings['dim_red_method']})")
     elif isinstance(_manifold, Hyperboloid) and points.shape[-1] > 3:
@@ -117,7 +117,6 @@ def to_hyperboloid_vis(x: torch.Tensor, poincare: PoincareBall) -> torch.Tensor:
     """Project PoincareBall points to the Hyperboloid. Before projecting to the Hyperboloid,
        we rescale the points to match the representational limitations between the PoincareBall
        and the Hyperboloid."""
-    x = x * 0.95
     res = poincare.to_hyperboloid(x)
     return res
 

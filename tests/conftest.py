@@ -21,15 +21,14 @@ def dtype(request: pytest.FixtureRequest) -> torch.dtype:
 def tolerance(dtype: str) -> Tuple[float, float]:
     """Set numerical tolerances for floating point comparisons."""
     if dtype == "float32":
-        atol = 5e-03
-        rtol = 5e-03
+        atol = 4e-03
+        rtol = 4e-03
     else:   # float64
         atol = 1e-07
         rtol = 1e-07
     return atol, rtol
 
-#@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
-@pytest.fixture(scope="package", params=[Euclidean, PoincareBall], ids=["Euclidean", "PoincareBall"])
+@pytest.fixture(scope="package", params=[Euclidean, Hyperboloid, PoincareBall], ids=["Euclidean", "Hyperboloid", "PoincareBall"])
 def manifold(seed: None, dtype: str, request: pytest.FixtureRequest) -> Manifold:
     """Test different manifolds and curvatures."""
     if dtype == "float32":
@@ -47,13 +46,17 @@ def uniform_points(seed: None, manifold: Manifold, request: pytest.FixtureReques
     if isinstance(manifold, Euclidean):
         bound = 100
         points = torch.empty((num_pts, dim), dtype=manifold.dtype).uniform_(-bound, bound)
-    elif isinstance(manifold, Hyperboloid):
-        assert False, "Not implemented yet"
-    else:   # PoincareBall
+    else:   # PoincareBall & Hyperboloid
         random_dirs = torch.normal(0, 1, size=(num_pts, dim), dtype=manifold.dtype)
         random_dirs /= random_dirs.norm(p=2, dim=-1, keepdim=True)
         random_radii = torch.rand((num_pts, 1), dtype=manifold.dtype).pow(1 / dim)
         points = manifold.c**-0.5 * (random_dirs * random_radii)
+        if isinstance(manifold, Hyperboloid): # Hyperboloid
+            poincare = PoincareBall(c=manifold.c, dtype=manifold.dtype)
+            # Scale the points to account for the representational limitations of the Hyperboloid
+            points = points * 0.5
+            points = poincare.to_hyperboloid(points)
+            points = manifold.proj(points)
     # Check if the points are in the manifold
     assert manifold.is_in_manifold(points), "Points are not in manifold!"
     return points
