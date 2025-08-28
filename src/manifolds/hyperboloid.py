@@ -1,9 +1,8 @@
-import math
 import torch
 
 from typing import List
 from .manifold import Manifold
-from ..utils.math_utils import acosh, cosh, sinh, smooth_clamp
+from ..utils.math_utils import acosh, cosh, sinh, smooth_clamp_min
 
 
 class Hyperboloid(Manifold):
@@ -174,7 +173,7 @@ class Hyperboloid(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
-            ['normal': Normal geodesic distance,
+            ['normal':     Normal geodesic distance,
              'smoothened': Smoothly clamps the arcosh input before
                            computing the geodesic distance (better convergence)]
 
@@ -191,11 +190,7 @@ class Hyperboloid(Manifold):
         x, y = self._2manifold_dtype([x, y])
         acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
         if version == "smoothened":
-            #acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
-            #TODO: check if max clamping is reasonable for performance
-            eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
-            clamp = float(math.log(2 / eps))
-            acosh_arg = smooth_clamp(acosh_arg, 1.0, clamp)
+            acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
         res = acosh(acosh_arg) / self.c.sqrt()
         return res
 
@@ -211,7 +206,7 @@ class Hyperboloid(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
-            ['normal': Normal geodesic distance,
+            ['normal':     Normal geodesic distance,
              'smoothened': Smoothly clamps the arcosh input before
                            computing the geodesic distance (better convergence)]
 
@@ -229,11 +224,7 @@ class Hyperboloid(Manifold):
         x0 = x.narrow(axis, 0, 1)
         acosh_arg = self.c.sqrt() * x0
         if version == "smoothened":
-            #acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
-            #TODO: check if max clamping is reasonable for performance
-            eps = torch.finfo(torch.float32).eps if self.dtype == torch.float32 else torch.finfo(torch.float64).eps
-            clamp = float(math.log(2 / eps))
-            acosh_arg = smooth_clamp(acosh_arg, 1.0, clamp)
+            acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
         res = acosh(acosh_arg) / self.c.sqrt()
         return res
 
