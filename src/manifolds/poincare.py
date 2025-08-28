@@ -261,6 +261,12 @@ class PoincareBall(Manifold):
             res = 1 + 2 * self.c * xy_diff_sqnorm / ((1 - self.c * x_sqnorm) * (1 - self.c * y_sqnorm))
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
+        elif version == "lorentzian_proxy":
+            xy_prod = x * y
+            xy0 = xy_prod.narrow(axis, 0, 1)
+            xy_rem = xy_prod.narrow(axis, 1, x.shape[axis]-1).sum(dim=axis, keepdim=True)
+            xy_mink = xy_rem - xy0
+            res = -2 / self.c - 2 * xy_mink
         else:
             raise ValueError(f"Unknown version: {version}")
         return res
@@ -307,6 +313,9 @@ class PoincareBall(Manifold):
             res = 1 + 2 * self.c * x_sqnorm / (1 - self.c * x_sqnorm)
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
+        elif version == "lorentzian_proxy":
+            x0 = x.narrow(axis, 0, 1)
+            res = -2 / self.c + 2 * x0 / self.c.sqrt()
         else:
             raise ValueError(f"Unknown version: {version}")
         return res
