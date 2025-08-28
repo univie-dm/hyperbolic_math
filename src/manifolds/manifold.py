@@ -30,11 +30,11 @@ class Manifold(torch.nn.Module):
         """Multiply manifold point(s) x with scalar(s) r."""
         raise NotImplementedError
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool, version: str) -> torch.Tensor:
         """Compute the geodesic distance(s) between manifold points x and y."""
         raise NotImplementedError
 
-    def dist_0(self, x: torch.Tensor, axis: int) -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, axis: int, version: str) -> torch.Tensor:
         """Compute the geodesic distance(s) of manifold point(s) x from/to the manifold's origin."""
         raise NotImplementedError
 

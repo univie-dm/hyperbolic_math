@@ -4,7 +4,7 @@ from ..manifolds import Manifold, PoincareBall
 from ..utils.math_utils import smooth_clamp_min
 
 
-def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000) -> torch.Tensor:
+def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000, version: str='mobius_direct') -> torch.Tensor:
     """
     Computes the pairwise distances between points on a given manifold.
 
@@ -16,7 +16,16 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The manifold on which the points lie
     batch_size : int (optional)
         The batch size for computing distances in chunks (default: 1_000_000)
-
+    version : str
+            Version of the geodesic distance to compute (default: "mobius_direct")
+            For PoincareBall:
+                ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
+                'mobius':        Mobius distance,
+                'metric_tensor': Metric-tensor induced distance,
+                'lorentzian_proxy': Lorentzian proxy distance]
+            For Hyperboloid:
+                    ['normal': Standard Hyperboloid distance,
+                    'smoothed': Smoothed Hyperboloid distance]
     Returns
     -------
     distmat : torch.Tensor
@@ -26,7 +35,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
     distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
     indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
     while indices.shape[1] > 0:
-        dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]]).reshape(-1)
+        dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]], version=version).reshape(-1)
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
         distmat[indices[1,:batch_size], indices[0,:batch_size]] = dist_batch
         indices = indices[:, batch_size:]

@@ -216,7 +216,8 @@ class PoincareBall(Manifold):
             Version of the geodesic distance to compute (default: "mobius_direct")
             ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
              'mobius':        Mobius distance,
-             'metric_tensor': Metric-tensor induced distance]
+             'metric_tensor': Metric-tensor induced distance,
+             'lorentzian_proxy': Lorentzian proxy distance]
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -285,7 +286,8 @@ class PoincareBall(Manifold):
             Version of the geodesic distance to compute (default: "mobius_direct")
             ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
              'mobius':        Mobius distance,
-             'metric_tensor': Metric-tensor induced distance]
+             'metric_tensor': Metric-tensor induced distance,
+             'lorentzian_proxy': Lorentzian proxy distance]
 
         Returns
         -------
