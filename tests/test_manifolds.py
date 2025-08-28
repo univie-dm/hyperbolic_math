@@ -164,9 +164,13 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
         rtol=rtol
     )
     # Symmetry
-    torch.testing.assert_close(manifold.dist(x, y), manifold.dist(y, x), atol=atol, rtol=rtol)
+    dist_xy = manifold.dist(x, y, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y)
+    dist_yx = manifold.dist(y, x, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(y, x)
+    torch.testing.assert_close(dist_xy, dist_yx, atol=atol, rtol=rtol)
     # Triangle inequality
-    assert torch.all(manifold.dist(x, z) <= manifold.dist(x, y) + manifold.dist(y, z) + atol)
+    single_dist = manifold.dist(x, z, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, z)
+    sum_dist = manifold.dist(x, y, version="normal") + manifold.dist(y, z, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y) + manifold.dist(y, z)
+    assert torch.all(single_dist <= sum_dist + atol)
     # Consistency of dist with dist_0
     torch.testing.assert_close(
         manifold.dist(uniform_points, origin, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(uniform_points, origin),

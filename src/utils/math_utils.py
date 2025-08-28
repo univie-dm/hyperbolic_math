@@ -39,23 +39,19 @@ def smooth_clamp(x: torch.Tensor, min_value: float, max_value: float, smoothing_
     return smooth_clamp_min(x, min_value, smoothing_factor=smoothing_factor)
 
 @torch.jit.script
-#TODO: test another run with extended & hard clamp
 def cosh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic cosine. Domain=(-inf, inf)."""
     # Safe limits as specified in SLEEF
     clamp = 88.0 if x.dtype == torch.float32 else 709.0
     x = smooth_clamp(x, -clamp, clamp)
-    #x = x.clamp(-clamp, clamp)
     return torch.cosh(x)
 
 @torch.jit.script
-#TODO: test another run with extended & hard clamp
 def sinh(x: torch.Tensor) -> torch.Tensor:
     """Hyperbolic sine. Domain=(-inf, inf)."""
     # Safe limits as specified in SLEEF
     clamp = 88.0 if x.dtype == torch.float32 else 709.0
     x = smooth_clamp(x, -clamp, clamp)
-    #x = x.clamp(-clamp, clamp)
     return torch.sinh(x)
 
 @torch.jit.script
