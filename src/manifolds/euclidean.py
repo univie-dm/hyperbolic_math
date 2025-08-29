@@ -97,7 +97,7 @@ class Euclidean(Manifold):
         res = r * x
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True, version: str="default") -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Euclidean manifold points x and y.
 
@@ -111,7 +111,9 @@ class Euclidean(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         backproject : bool (ignored)
             Whether to project results back to the Euclidean manifold (default: True)
-        Note: Backproject is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        version : str (ignored)
+            Version of the geodesic distance to compute (default: "default")
+        Note: Backproject and version are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -122,7 +124,7 @@ class Euclidean(Manifold):
         res = (x - y).norm(p=2, dim=axis, keepdim=True)
         return res
 
-    def dist_0(self, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str="default") -> torch.Tensor:
         """
         Compute the geodesic distance(s) of Euclidean manifold point(s) x from/to the Euclidean origin.
 
@@ -132,6 +134,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
+        version : str (ignored)
+            Version of the geodesic distance to compute (default: "default")
+        Note: Version is not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
