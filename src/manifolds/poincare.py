@@ -214,9 +214,9 @@ class PoincareBall(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "mobius_direct")
-            ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
-             'mobius':        Mobius distance,
-             'metric_tensor': Metric-tensor induced distance,
+            ['mobius_direct':    Symmetric Mobius distance that doesn't compute self.addition(),
+             'mobius':           Mobius distance,
+             'metric_tensor':    Metric-tensor induced distance,
              'lorentzian_proxy': Lorentzian proxy distance]
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
@@ -230,16 +230,11 @@ class PoincareBall(Manifold):
         ----------
         Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
-
-        Stability
-        ---------
-        'mobius_direct' avoids the asymmetric mobius addition, but casually fails to comply
-            with the tangent_norm unit testing since it also uses the mobius addition.
-        'mobius' is faster than 'metric_tensor', but not symmetric.
-        'metric_tensor' is much faster than Mobius-dist, but unstable for boundary points.
+        Marc T. Law, et al. "Lorentzian distance learning for hyperbolic representations."
+            International Conference on Machine Learning (2019).
         """
         x, y = self._2manifold_dtype([x, y])
-        if version == "mobius_direct":
+        if version in ["mobius_direct", "default"]:
             # Symmetric Mobius distance that doesn't need self.addition()
             sqrt_c = self.c.sqrt()
             x2y2 = x.pow(2).sum(dim=axis, keepdim=True) * y.pow(2).sum(dim=axis, keepdim=True)
@@ -284,9 +279,9 @@ class PoincareBall(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "mobius_direct")
-            ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
-             'mobius':        Mobius distance,
-             'metric_tensor': Metric-tensor induced distance,
+            ['mobius_direct':    Symmetric Mobius distance that doesn't compute self.addition(),
+             'mobius':           Mobius distance,
+             'metric_tensor':    Metric-tensor induced distance,
              'lorentzian_proxy': Lorentzian proxy distance]
 
         Returns
@@ -298,13 +293,11 @@ class PoincareBall(Manifold):
         ----------
         Ganea Octavian, Gary Bécigneul, and Thomas Hofmann. "Hyperbolic neural networks."
             Advances in neural information processing systems 31 (2018).
-
-        Stability
-        ---------
-        'metric_tensor' is much faster than Mobius-dist, but unstable for boundary points.
+        Marc T. Law, et al. "Lorentzian distance learning for hyperbolic representations."
+            International Conference on Machine Learning (2019).
         """
         x, = self._2manifold_dtype([x])
-        if version in ["mobius_direct", "mobius"]:
+        if version in ["mobius_direct", "mobius", "default"]:
             # (Direct) Mobius distance
             sqrt_c = self.c.sqrt()
             dist_c = atanh(sqrt_c * x.norm(p=2, dim=axis, keepdim=True))

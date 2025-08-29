@@ -152,29 +152,30 @@ def test_dist(manifold: Manifold, tolerance: Tuple[float, float],
     x, y, z = uniform_points.split(uniform_points.shape[0] // 3, dim=0)
     if isinstance(manifold, Hyperboloid):
         origin = manifold._create_origin_from_reference(uniform_points)
-    else:
+        version = "normal"
+    elif isinstance(manifold, PoincareBall):
         origin = torch.zeros_like(uniform_points)
-    assert torch.isfinite(manifold.dist(x, y)).all()
-    assert torch.isfinite(manifold.dist_0(x)).all()
+        version = "mobius_direct"
+    else:   # Euclidean
+        origin = torch.zeros_like(uniform_points)
+        version = "default"
+    assert torch.isfinite(manifold.dist(x, y, version=version)).all()
+    assert torch.isfinite(manifold.dist_0(x, version=version)).all()
     # Reflexivity
     torch.testing.assert_close(
-        manifold.dist(uniform_points, uniform_points, version="normal")+1 if isinstance(manifold, Hyperboloid) else manifold.dist(uniform_points, uniform_points)+1,
+        manifold.dist(uniform_points, uniform_points, version=version)+1,
         torch.ones((uniform_points.shape[0], 1), dtype=uniform_points.dtype),
         atol=atol,
         rtol=rtol
     )
     # Symmetry
-    dist_xy = manifold.dist(x, y, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y)
-    dist_yx = manifold.dist(y, x, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(y, x)
-    torch.testing.assert_close(dist_xy, dist_yx, atol=atol, rtol=rtol)
+    torch.testing.assert_close(manifold.dist(x, y, version=version), manifold.dist(y, x, version=version), atol=atol, rtol=rtol)
     # Triangle inequality
-    single_dist = manifold.dist(x, z, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, z)
-    sum_dist = manifold.dist(x, y, version="normal") + manifold.dist(y, z, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y) + manifold.dist(y, z)
-    assert torch.all(single_dist <= sum_dist + atol)
+    assert torch.all(manifold.dist(x, z, version=version) <= manifold.dist(x, y, version=version) + manifold.dist(y, z, version=version) + atol)
     # Consistency of dist with dist_0
     torch.testing.assert_close(
-        manifold.dist(uniform_points, origin, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(uniform_points, origin),
-        manifold.dist_0(uniform_points, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist_0(uniform_points),
+        manifold.dist(uniform_points, origin, version=version),
+        manifold.dist_0(uniform_points, version=version),
         atol=atol,
         rtol=rtol
     )
@@ -287,17 +288,22 @@ def test_tangent_norm(manifold: Manifold, tolerance: Tuple[float, float],
     x, y = uniform_points.split(uniform_points.shape[0] // 2, dim=0)
     if isinstance(manifold, Hyperboloid):
         origin = manifold._create_origin_from_reference(uniform_points)
-    else:
+        version = "normal"
+    elif isinstance(manifold, PoincareBall):
         origin = torch.zeros_like(uniform_points)
+        version = "mobius_direct"
+    else:   # Euclidean
+        origin = torch.zeros_like(uniform_points)
+        version = "default"
     # Consistency of tangent_norm with logmap/logmap_0 and dist/dist_0
     torch.testing.assert_close(
-        manifold.dist(x, y, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist(x, y),
+        manifold.dist(x, y, version=version),
         manifold.tangent_norm(manifold.logmap(y, x), x),
         atol=atol,
         rtol=rtol
     )
     torch.testing.assert_close(
-        manifold.dist_0(uniform_points, version="normal") if isinstance(manifold, Hyperboloid) else manifold.dist_0(uniform_points),
+        manifold.dist_0(uniform_points, version=version),
         manifold.tangent_norm(manifold.logmap_0(uniform_points), origin),
         atol=atol,
         rtol=rtol

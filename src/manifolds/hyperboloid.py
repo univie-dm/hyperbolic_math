@@ -189,7 +189,7 @@ class Hyperboloid(Manifold):
         """
         x, y = self._2manifold_dtype([x, y])
         acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
-        if version == "smoothened":
+        if version in ["smoothened", "default"]:
             acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
         res = acosh(acosh_arg) / self.c.sqrt()
         return res
@@ -223,7 +223,7 @@ class Hyperboloid(Manifold):
         x, = self._2manifold_dtype([x])
         x0 = x.narrow(axis, 0, 1)
         acosh_arg = self.c.sqrt() * x0
-        if version == "smoothened":
+        if version in ["smoothened", "default"]:
             acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
         res = acosh(acosh_arg) / self.c.sqrt()
         return res

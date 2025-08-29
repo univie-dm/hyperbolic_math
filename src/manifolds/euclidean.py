@@ -111,7 +111,9 @@ class Euclidean(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         backproject : bool (ignored)
             Whether to project results back to the Euclidean manifold (default: True)
-        Note: Backproject is not used in the Euclidean manifold, but included for consistency with other manifolds.
+        version : str (ignored)
+            Version of the geodesic distance to compute (default: "default")
+        Note: Backproject and version are not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------
@@ -132,8 +134,9 @@ class Euclidean(Manifold):
             Euclidean manifold point(s)
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
-        version : str
-            Not used for euclidean manifold. Go wild.
+        version : str (ignored)
+            Version of the geodesic distance to compute (default: "default")
+        Note: Version is not used in the Euclidean manifold, but included for consistency with other manifolds.
 
         Returns
         -------

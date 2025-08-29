@@ -1,10 +1,9 @@
 import torch
 
-from ..manifolds import Manifold, PoincareBall
-from ..utils.math_utils import smooth_clamp_min
+from ..manifolds import Manifold, Hyperboloid, PoincareBall
 
 
-def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000, version: str='mobius_direct') -> torch.Tensor:
+def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000, version: str='default') -> torch.Tensor:
     """
     Computes the pairwise distances between points on a given manifold.
 
@@ -16,21 +15,21 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The manifold on which the points lie
     batch_size : int (optional)
         The batch size for computing distances in chunks (default: 1_000_000)
-    version : str
-            Version of the geodesic distance to compute (default: "mobius_direct")
-            For PoincareBall:
-                ['mobius_direct': Symmetric Mobius distance that doesn't compute self.addition(),
-                'mobius':        Mobius distance,
-                'metric_tensor': Metric-tensor induced distance,
-                'lorentzian_proxy': Lorentzian proxy distance]
-            For Hyperboloid:
-                    ['normal': Standard Hyperboloid distance,
-                    'smoothed': Smoothed Hyperboloid distance]
+    version : str (optional)
+        Version of the geodesic distance to compute (default: "default")
+        For Hyperboloid: ['smoothed'=default, 'normal']
+        For PoincareBall: ['mobius_direct'=default, 'mobius', 'metric_tensor', 'lorentzian_proxy']
+
     Returns
     -------
     distmat : torch.Tensor
         The tensor containing the pairwise distances between points
     """
+    if not (version == 'default' or
+            (isinstance(manifold, Hyperboloid) and version in ['smoothed', 'normal']) or
+            (isinstance(manifold, PoincareBall) and version in ['mobius_direct', 'mobius', 'metric_tensor', 'lorentzian_proxy'])
+            ):
+        raise ValueError(f"Unsupported version '{version}' for manifold '{manifold.name}'.")
     device = points.device
     distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
     indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
@@ -39,41 +38,6 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
         distmat[indices[1,:batch_size], indices[0,:batch_size]] = dist_batch
         indices = indices[:, batch_size:]
-    return distmat
-
-def compute_smoothed_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000) -> torch.Tensor:
-    """
-    Computes the pairwise distances between points on a given manifold.
-    If manifold is a PoincareBall, the distances are computed as usual.
-    If manifold is a Hyperboloid, the arguments of the acosh() are smoothly clamped to help with convergence of some algorithms.
-
-    Parameters
-    ----------
-    points : torch.Tensor
-        Manifold points
-    manifold : Manifold
-        The manifold on which the points lie
-    batch_size : int (optional)
-        The batch size for computing distances in chunks (default: 1_000_000)
-
-    Returns
-    -------
-    distmat : torch.Tensor
-        The tensor containing the pairwise distances between points
-    """
-    if isinstance(manifold, PoincareBall):
-        distmat = compute_pairwise_distances(points, manifold, batch_size=batch_size)
-    else: # Hyperboloid
-        device = points.device
-        distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
-        indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
-        while indices.shape[1] > 0:
-            dist_arg = -manifold.c * manifold._minkowski_inner(points[indices[0,:batch_size]], points[indices[1,:batch_size]])
-            smoothed_dist_arg = smooth_clamp_min(dist_arg, 1.0)
-            dist_batch = (torch.acosh(smoothed_dist_arg) / manifold.c.sqrt()).reshape(-1)
-            distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
-            distmat[indices[1,:batch_size], indices[0,:batch_size]] = dist_batch
-            indices = indices[:, batch_size:]
     return distmat
 
 def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, version="average"):
