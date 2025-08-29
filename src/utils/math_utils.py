@@ -74,5 +74,5 @@ def asinh(x: torch.Tensor) -> torch.Tensor:
 def atanh(x: torch.Tensor) -> torch.Tensor:
     """Inverse hyperbolic tangent. Domain=(-1, 1)."""
     eps = _get_tensor_eps(x)
-    x = smooth_clamp(x, -1 + eps, 1 - eps)
+    x = x.clamp(-1 + eps, 1 - eps)
     return torch.atanh(x)
