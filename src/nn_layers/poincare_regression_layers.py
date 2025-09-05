@@ -1,7 +1,7 @@
 import math
 import torch
 
-from .helpers import compute_mlr_PP, get_torch_dtype
+from .helpers import compute_mlr_PoincarePP, get_torch_dtype
 from ..manifolds import ManifoldParameter, PoincareBall
 from ..utils.math_utils import smooth_clamp, asinh
 
@@ -128,6 +128,7 @@ class HyperbolicRegressionPoincare(torch.nn.Module):
 
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+
         # Map self.weights from the tangent space at the origin to the tangent space at self.bias
         pt_weight = self.manifold.ptransp_0(self.weight, self.bias, axis=self.hyperbolic_axis, backproject=self.backproject)
         # Compute the multinomial linear regression score(s)
@@ -215,6 +216,7 @@ class HyperbolicRegressionPoincarePP(torch.nn.Module):
         """
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
-        res = compute_mlr_PP(self.manifold, x, self.weight, self.bias,
-                             self.hyperbolic_axis, self.clamping_factor, self.smoothing_factor)
+
+        res = compute_mlr_PoincarePP(self.manifold, x, self.weight, self.bias,
+                                     self.hyperbolic_axis, self.clamping_factor, self.smoothing_factor)
         return res

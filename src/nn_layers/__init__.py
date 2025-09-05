@@ -5,6 +5,11 @@ from .hyperbolic_standard_layers import Logmap
 from .hyperbolic_standard_layers import Logmap_0
 from .hyperbolic_standard_layers import Proj
 from .hyperbolic_standard_layers import TanProj
+from .hyperbolic_standard_layers import HyperbolicActivation
+from .hyperboloid_linear_layers import HyperbolicLinearHyperboloid
+from .hyperboloid_linear_layers import HyperbolicLinearHyperboloidFHNN
+from .hyperboloid_linear_layers import HyperbolicLinearHyperboloidFHCNN
+from .hyperboloid_regression_layers import HyperbolicRegressionHyperboloid
 from .poincare_linear_layers import HyperbolicLinearPoincare
 from .poincare_linear_layers import HyperbolicLinearPoincarePP
 from .poincare_regression_layers import HyperbolicRegressionPoincare

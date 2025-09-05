@@ -625,7 +625,7 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
-        x, = self._2manifold_dtype([x])
+        v, x = self._2manifold_dtype([v, x])
         x_normalized = x / (-self.c * self._minkowski_inner(x, x, axis=axis)).sqrt()
         coeff = self._minkowski_inner(x_normalized, v, axis=axis) / self._minkowski_inner(x_normalized, x_normalized, axis=axis)
         res = v - coeff * x_normalized

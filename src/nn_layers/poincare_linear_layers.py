@@ -1,6 +1,6 @@
 import torch
 
-from .helpers import compute_mlr_PP, get_torch_dtype
+from .helpers import compute_mlr_PoincarePP, get_torch_dtype
 from ..manifolds import ManifoldParameter, PoincareBall
 from ..utils.math_utils import sinh
 
@@ -81,6 +81,9 @@ class HyperbolicLinearPoincare(torch.nn.Module):
 
         if self.input_space == "manifold":
             x = self.manifold.logmap_0(x, axis=self.hyperbolic_axis)
+        else:
+            x, = self.manifold._2manifold_dtype([x])
+
         x = (x.unsqueeze(-1) * self.weight.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
         x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
         res = self.manifold.addition(x, self.bias, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
@@ -169,8 +172,8 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
 
-        v = compute_mlr_PP(self.manifold, x, self.weight, self.bias,
-                           self.hyperbolic_axis, self.clamping_factor, self.smoothing_factor)
+        v = compute_mlr_PoincarePP(self.manifold, x, self.weight, self.bias, self.hyperbolic_axis,
+                                   self.clamping_factor, self.smoothing_factor)
         sqrt_c = self.manifold.c.sqrt()
         w = sinh(sqrt_c * v) / sqrt_c # (B, out_dim)
         w2 = w.pow(2).sum(axis=self.hyperbolic_axis, keepdim=True) # (B, 1)

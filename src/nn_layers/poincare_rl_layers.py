@@ -182,6 +182,7 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         """
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+
         # HDRL expands the weights to support multiple spaces at once
         # We don't use this. Instead we feed x of shape (B, on_dim)
         res = self._compute_mlr(x, self.weight, self.bias)
