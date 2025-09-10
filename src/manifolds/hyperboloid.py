@@ -463,6 +463,9 @@ class Hyperboloid(Manifold):
             International conference on machine learning (2020).
         """
         v, y = self._2manifold_dtype([v, y])
+        if torch.allclose(v, torch.zeros_like(v)):
+            # To avoid gradient NaNs, we need to directly return a zero vector here
+            return torch.zeros_like(v)
         origin = self._create_origin_from_reference(v, axis=axis)
         vy = self._minkowski_inner(v, y, axis=axis)
         y0 = y.narrow(axis, 0, 1)
