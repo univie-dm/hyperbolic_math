@@ -214,8 +214,8 @@ class HoroPCA(nn.Module):
         hyperboloid_ideals = self._to_hyperboloid_ideals(Q_ortho.T)
         # Project x onto the submanifold spanned by the Hyperboloid's principal components
         x_proj = self._horo_projection(x, hyperboloid_ideals)
-        # Compute the (smoothed) pairwise distances directly in the Hyperboloid
-        distances = compute_pairwise_distances(x_proj, self.hyperboloid, version="smoothed")
+        # Compute the (smoothened) pairwise distances directly in the Hyperboloid
+        distances = compute_pairwise_distances(x_proj, self.hyperboloid, version="smoothened")
         # Compute the biased generalized variance of the projected points
         var = torch.mean(distances ** 2)
         return -var

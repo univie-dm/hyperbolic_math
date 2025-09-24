@@ -17,7 +17,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The batch size for computing distances in chunks (default: 1_000_000)
     version : str (optional)
         Version of the geodesic distance to compute (default: "default")
-        For Hyperboloid: ['smoothed'=default, 'normal']
+        For Hyperboloid: ['smoothened'=default, 'normal']
         For PoincareBall: ['mobius_direct'=default, 'mobius', 'metric_tensor', 'lorentzian_proxy']
 
     Returns
@@ -26,7 +26,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The tensor containing the pairwise distances between points
     """
     if not (version == 'default' or
-            (isinstance(manifold, Hyperboloid) and version in ['smoothed', 'normal']) or
+            (isinstance(manifold, Hyperboloid) and version in ['smoothened', 'normal']) or
             (isinstance(manifold, PoincareBall) and version in ['mobius_direct', 'mobius', 'metric_tensor', 'lorentzian_proxy'])
             ):
         raise ValueError(f"Unsupported version '{version}' for manifold '{manifold.name}'.")
