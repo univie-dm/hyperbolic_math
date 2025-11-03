@@ -17,7 +17,7 @@ A PyTorch-based library for hyperbolic geometry and deep learning in hyperbolic 
 
 ### Manifolds
 - **Poincaré Ball**: Poincaré model of hyperbolic space with constraint $x_1^2 + x_1^2 + \ldots + x_d^2 < 1/c$
-- **Hyperboloid**: Lorentz model of hyperbolic space with constraint $-x_0^2 + x_1^2 + \ldots + x_d^2 = -1/c,\,\, x_0 > 0$
+- **Hyperboloid**: Lorentz model of hyperbolic space with constraint $-x_0^2 + x_1^2 + \ldots + x_d^2 = -1/c,  x_0 > 0$
 - **Euclidean**: Standard Euclidean space for comparison and baseline experiments
 - **Trainable curvature**: Support for learnable curvature parameters via `trainable_c` flag
 - **Precision control**: Fully configurable manifold precision (`float32` or `float64`) for optimal performance-accuracy trade-offs
