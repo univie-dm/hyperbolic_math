@@ -1,7 +1,7 @@
 matplotlib
 numpy
-torch
 pytest
 scikit-learn
 scipy
+torch
 tqdm

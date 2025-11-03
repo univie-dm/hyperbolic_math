@@ -36,7 +36,7 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
 
     References
     ----------
-    Edoardo Cetin, Benjamin Chamberlain, Michael Bronstein and Jonathan J Hunt. "Hyperbolic deep reinforcement learning."
+    Edoardo Cetin, et al. "Hyperbolic deep reinforcement learning."
         arXiv (2022).
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
         arXiv (2020).
@@ -149,8 +149,8 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
 
         References
         ----------
-        Edoardo Cetin, Benjamin Chamberlain, Michael Bronstein and Jonathan J Hunt. "Hyperbolic deep reinforcement learning."
-            arXiv (2022)
+        Edoardo Cetin, et al. "Hyperbolic deep reinforcement learning."
+            arXiv (2022).
         Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
             arXiv (2020).
         """

@@ -561,8 +561,8 @@ class Hyperboloid(Manifold):
 
         References
         ----------
-        Maximillian Nickel, Douwe Kiela. "Learning continuous hierarchies in the lorentz model of hyperbolic geometry."
-            International conference on machine learning. PMLR, 2018.
+        Maximillian Nickel and Douwe Kiela. "Learning continuous hierarchies in the lorentz model of hyperbolic geometry."
+            International conference on machine learning. PMLR (2018).
         """
         x, = self._2manifold_dtype([x])
         # Convert the Riemannian gradient to the Euclidean one
@@ -651,7 +651,7 @@ class Hyperboloid(Manifold):
             True if all points x lie in the Hyperboloid, False otherwise
         """
         x, = self._2manifold_dtype([x])
-        cond1 = torch.allclose(self._minkowski_inner(x, x, axis=axis), -1 / self.c, atol=1e-04)
+        cond1 = torch.allclose(self._minkowski_inner(x, x, axis=axis), (-1 / self.c).to(self.dtype), atol=1e-04)
         cond2 = torch.all(x.narrow(axis, 0, 1) > 0)
         res = cond1 and cond2
         return res

@@ -8,7 +8,7 @@ from ..utils.math_utils import acosh, atanh, tanh
 class PoincareBall(Manifold):
     """
     PoincareBall manifold class.
-    Convention: x0^2 + x1^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
+    Convention: x1^2 + x2^2 + ... + xd^2 < 1/c  with c > 0 and sectional curvature -c.
     """
     def __init__(
         self,
@@ -109,7 +109,8 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
+        Abraham Ungar. "A gyrovector space approach to hyperbolic geometry."
+            Springer Nature (2022).
         """
         x, y, z = self._2manifold_dtype([x, y, z])
         c2 = self.c**2
@@ -148,7 +149,8 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Ungar, Abraham. A gyrovector space approach to hyperbolic geometry. Springer Nature, 2022.
+        Abraham Ungar. "A gyrovector space approach to hyperbolic geometry."
+            Springer Nature (2022).
         """
         x, y = self._2manifold_dtype([x, y])
         x2 = x.pow(2).sum(dim=axis, keepdim=True)
@@ -258,6 +260,8 @@ class PoincareBall(Manifold):
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
         elif version == "lorentzian_proxy":
+            x = self.to_hyperboloid(x, axis=axis)
+            y = self.to_hyperboloid(y, axis=axis)
             xy_prod = x * y
             xy0 = xy_prod.narrow(axis, 0, 1)
             xy_rem = xy_prod.narrow(axis, 1, x.shape[axis]-1).sum(dim=axis, keepdim=True)
@@ -666,7 +670,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Bonnabel, Silvere. "Stochastic gradient descent on Riemannian manifolds."
+        Silvere Bonnabel. "Stochastic gradient descent on Riemannian manifolds."
             IEEE Transactions on Automatic Control 58.9 (2013): 2217-2229.
 
         Stability
@@ -698,7 +702,7 @@ class PoincareBall(Manifold):
 
         References
         ----------
-        Nickel, Maximillian, and Douwe Kiela. "Poincaré embeddings for learning hierarchical representations."
+        Maximillian Nickel and Douwe Kiela. "Poincaré embeddings for learning hierarchical representations."
             Advances in neural information processing systems 30 (2017).
         """
         x, sqrt_c_recipr = self._2manifold_dtype([x, 1 / self.c.sqrt()])
