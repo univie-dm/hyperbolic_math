@@ -29,11 +29,6 @@ class Hyperboloid(Manifold):
         else:
             raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32 and float64.")
 
-        if torch.finfo(c.dtype).eps < torch.finfo(self.dtype).eps:
-            print(f"Warning: self.c.dtype is {c.dtype}, but self.dtype is {self.dtype}. "
-                  f"All manifold operations will be performed in precision {c.dtype}!")
-            self.dtype = c.dtype
-
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Convert the list of tensor(s) xs to the Hyperboloid's dtype.
@@ -48,10 +43,10 @@ class Hyperboloid(Manifold):
         res : List[torch.Tensor]
             The list of tensor(s) converted to the Hyperboloid's dtype
         """
-        res = []
-        for x in xs:
-            res.append(x.to(self.dtype))
-        return res
+        # Most frequent case: All tensors are of the correct dtype
+        if all(x.dtype == self.dtype for x in xs):
+            return xs
+        return [x if x.dtype == self.dtype else x.to(self.dtype) for x in xs]
 
     def _minkowski_inner(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """

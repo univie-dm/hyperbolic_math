@@ -42,10 +42,10 @@ class Euclidean(Manifold):
         res : List[torch.Tensor]
             The list of tensor(s) converted to the Euclidean manifold's dtype
         """
-        res = []
-        for x in xs:
-            res.append(x.to(self.dtype))
-        return res
+        # Most frequent case: All tensors are of the correct dtype
+        if all(x.dtype == self.dtype for x in xs):
+            return xs
+        return [x if x.dtype == self.dtype else x.to(self.dtype) for x in xs]
 
     def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
         """

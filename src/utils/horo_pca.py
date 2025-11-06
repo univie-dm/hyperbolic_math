@@ -238,13 +238,13 @@ class HoroPCA(nn.Module):
         x_centered = center_data(x, self.data_mean, self.hyperboloid)
         # The parameters of the model are ideal points that lie in the manifold's closure, i.e. they
         # are part of the Euclidean ambient space and do not lie in the hyperbolic space itself
-        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optim = torch.optim.Adam([self.Q], lr=self.lr)
         # Iteratively compute the projected variance loss and update the parameters
         for _ in range(self.max_steps):
             optim.zero_grad()
             loss = self.compute_loss(x_centered)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), 1e05)
+            torch.nn.utils.clip_grad_norm_([self.Q], 1e05)
             optim.step()
 
     def transform(self, x: torch.Tensor, recompute_mean: bool=False) -> torch.Tensor:
