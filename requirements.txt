@@ -2,6 +2,4 @@ matplotlib
 numpy
 pytest
 scikit-learn
-scipy
 torch
-tqdm

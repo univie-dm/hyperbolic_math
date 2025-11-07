@@ -65,8 +65,9 @@ pip install -e ".[dev]"
 - Python >= 3.8, < 3.11
 - PyTorch
 - NumPy
-- SciPy
-- tqdm
+- Matplotlib
+- Scikit-learn
+- Pytest (for testing)
 
 
 ## Quick Start
