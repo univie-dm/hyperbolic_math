@@ -1,5 +1,5 @@
 Hyperbolic Math Documentation
-============================
+=============================
 
 Welcome to hyper_math's documentation!
 

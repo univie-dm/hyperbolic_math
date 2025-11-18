@@ -8,7 +8,6 @@ A PyTorch-based library for hyperbolic geometry and deep learning in hyperbolic 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Testing](#testing)
-- [Documentation](#documentation)
 - [Citation](#citation)
 - [License](#license)
 
@@ -217,24 +216,6 @@ Tests include:
 - Numerical stability tests
 - Manifold-specific operations
 - Optimizer convergence tests
-
-
-## Documentation
-TODO:
-To build the documentation locally:
-
-```bash
-# Install documentation dependencies
-pip install sphinx sphinx-autodoc-typehints sphinx-rtd-theme
-
-# Build HTML documentation
-cd docs
-make html
-
-# View documentation
-python -m http.server 8000
-# Then navigate to http://localhost:8000/_build/html/
-```
 
 
 ## Citation

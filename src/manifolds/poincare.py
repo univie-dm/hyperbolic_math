@@ -210,11 +210,11 @@ class PoincareBall(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "mobius_direct")
-            ['mobius_direct':    Symmetric Mobius distance that doesn't compute self.addition(),
-             'mobius':           Mobius distance,
-             'metric_tensor':    Metric-tensor induced distance,
-             'lorentzian_proxy': Lorentzian proxy distance]
+            Version of the geodesic distance to compute (default: "mobius_direct").
+            Options:
+            - 'mobius_direct': Symmetric Mobius distance that doesn't compute self.addition()
+            - 'mobius': Mobius distance
+            - 'metric_tensor': Metric-tensor induced distance
         backproject : bool
             Whether to project results back to the PoincareBall (default: True)
 
@@ -236,7 +236,7 @@ class PoincareBall(Manifold):
             sqrt_c = self.c.sqrt()
             x2y2 = x.pow(2).sum(dim=axis, keepdim=True) * y.pow(2).sum(dim=axis, keepdim=True)
             xy = (x * y).sum(dim=axis, keepdim=True)
-            num = (y - x).norm(p=2, dim=axis, keepdim=True)
+            num = (x - y).norm(p=2, dim=axis, keepdim=True)
             denom = (1 - 2 * self.c * xy + self.c**2 * x2y2).clamp_min(self.min_enorm).sqrt()
             xysum_norm = num / denom
             dist_c = atanh(sqrt_c * xysum_norm)
@@ -248,20 +248,12 @@ class PoincareBall(Manifold):
             res = 2 * dist_c / sqrt_c
         elif version == "metric_tensor":
             # Metric-tensor induced distance
-            x_sqnorm = x.pow(2).sum(dim=axis, keepdim=True)
-            y_sqnorm = y.pow(2).sum(dim=axis, keepdim=True)
-            xy_diff_sqnorm = (x - y).pow(2).sum(dim=axis, keepdim=True)
-            res = 1 + 2 * self.c * xy_diff_sqnorm / ((1 - self.c * x_sqnorm) * (1 - self.c * y_sqnorm))
+            x2 = x.pow(2).sum(dim=axis, keepdim=True)
+            y2 = y.pow(2).sum(dim=axis, keepdim=True)
+            xy_diff2 = (x - y).pow(2).sum(dim=axis, keepdim=True)
+            res = 1 + 2 * self.c * xy_diff2 / ((1 - self.c * x2) * (1 - self.c * y2))
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
-        elif version == "lorentzian_proxy":
-            x = self.to_hyperboloid(x, axis=axis)
-            y = self.to_hyperboloid(y, axis=axis)
-            xy_prod = x * y
-            xy0 = xy_prod.narrow(axis, 0, 1)
-            xy_rem = xy_prod.narrow(axis, 1, x.shape[axis]-1).sum(dim=axis, keepdim=True)
-            xy_mink = xy_rem - xy0
-            res = -2 / self.c - 2 * xy_mink
         else:
             raise ValueError(f"Unknown version: {version}")
         return res
@@ -277,11 +269,11 @@ class PoincareBall(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "mobius_direct")
-            ['mobius_direct':    Symmetric Mobius distance that doesn't compute self.addition(),
-             'mobius':           Mobius distance,
-             'metric_tensor':    Metric-tensor induced distance,
-             'lorentzian_proxy': Lorentzian proxy distance]
+            Version of the geodesic distance to compute (default: "mobius_direct").
+            Options:
+            - 'mobius_direct': Symmetric Mobius distance that doesn't compute self.addition()
+            - 'mobius': Mobius distance
+            - 'metric_tensor': Metric-tensor induced distance
 
         Returns
         -------
@@ -303,13 +295,10 @@ class PoincareBall(Manifold):
             res = 2 * dist_c / sqrt_c
         elif version == "metric_tensor":
             # Metric-tensor induced distance
-            x_sqnorm = x.pow(2).sum(dim=axis, keepdim=True)
-            res = 1 + 2 * self.c * x_sqnorm / (1 - self.c * x_sqnorm)
+            x2 = x.pow(2).sum(dim=axis, keepdim=True)
+            res = 1 + 2 * self.c * x2 / (1 - self.c * x2)
             condition = res < 1 + self.min_enorm
             res = torch.where(condition, torch.zeros_like(res), acosh(res) / self.c.sqrt())
-        elif version == "lorentzian_proxy":
-            x0 = x.narrow(axis, 0, 1)
-            res = -2 / self.c + 2 * x0 / self.c.sqrt()
         else:
             raise ValueError(f"Unknown version: {version}")
         return res

@@ -168,9 +168,9 @@ class Hyperboloid(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
-            ['normal':     Normal geodesic distance,
-             'smoothened': Smoothly clamps the acosh input before
-                           computing the geodesic distance (better convergence)]
+            Options:
+            - 'normal': Normal geodesic distance
+            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance (better convergence)
 
         Returns
         -------
@@ -201,9 +201,9 @@ class Hyperboloid(Manifold):
             Axis along which to compute the geodesic distance (default: -1)
         version : str
             Version of the geodesic distance to compute (default: "smoothened")
-            ['normal':     Normal geodesic distance,
-             'smoothened': Smoothly clamps the acosh input before
-                           computing the geodesic distance (better convergence)]
+            Options:
+            - 'normal': Normal geodesic distance
+            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance (better convergence)
 
         Returns
         -------
