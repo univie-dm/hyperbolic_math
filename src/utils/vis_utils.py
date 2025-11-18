@@ -186,8 +186,8 @@ def plot_edges(points: torch.Tensor, edges: Tuple[List[int], List[int]],
     dir = poincare.addition(-x, y)
     for _x, _dir in zip(x, dir):
         # Compute points on the geodesic segment connecting x and y
-        second_term = poincare.scalar_mul(t, _dir.repeat(spacing, 1), backproject=True)
-        geodesic = poincare.addition(_x.repeat(spacing, 1), second_term, backproject=True)
+        second_term = poincare.scalar_mul(t, _dir.repeat(spacing, 1))
+        geodesic = poincare.addition(_x.repeat(spacing, 1), second_term)
         geodesic = geodesic.cpu()
         ax.plot(geodesic[:, 0], geodesic[:, 1], c='dimgrey', zorder=3, linewidth=1.5)
     handles.append(plt.Line2D([0], [0], color='dimgrey', label='Geodesic'))

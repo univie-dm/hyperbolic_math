@@ -128,8 +128,7 @@ class HyperbolicNet(nn.Module):
 
         # Hyperbolic linear layer
         self.hyp_linear = HyperbolicLinearPoincarePP(
-            manifold, input_dim, hidden_dim,
-            hyperbolic_axis=-1, backproject=True
+            manifold, input_dim, hidden_dim, hyperbolic_axis=-1
         )
 
         # Map back to tangent space for output
@@ -176,7 +175,6 @@ optimizer = RiemannianAdam(
     [hyperbolic_weights],
     lr=1e-3,
     expmap_update=True,
-    backproject=True,
     hyperbolic_axis=-1
 )
 
@@ -260,6 +258,8 @@ This library builds upon research in hyperbolic geometry and deep learning, incl
     *Advances in neural information processing systems 30 (2017)*.
 - Marc T. Law, et al. "Lorentzian distance learning for hyperbolic representations."
     *International Conference on Machine Learning (2019)*.
+- Sashank J. Reddi, Satyen Kale, and Sanjiv Kumar. "On the convergence of adam and beyond."
+    *arXiv preprint arXiv:1904.09237 (2019)*.
 - Shimizu Ryohei, Yusuke Mukuta, and Tatsuya Harada. "Hyperbolic neural networks++."
     *arXiv preprint arXiv:2006.08210 (2020)*.
 - Silvere Bonnabel. "Stochastic gradient descent on Riemannian manifolds."

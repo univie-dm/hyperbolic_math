@@ -23,8 +23,6 @@ class HyperbolicLinearPoincare(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -43,7 +41,6 @@ class HyperbolicLinearPoincare(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold"
@@ -55,7 +52,6 @@ class HyperbolicLinearPoincare(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -85,8 +81,8 @@ class HyperbolicLinearPoincare(torch.nn.Module):
             x, = self.manifold._2manifold_dtype([x])
 
         x = (x.unsqueeze(-1) * self.weight.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
-        x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
-        res = self.manifold.addition(x, self.bias, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
+        x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis) # (B, out_dim)
+        res = self.manifold.addition(x, self.bias, axis=self.hyperbolic_axis) # (B, out_dim)
         return res
 
 class HyperbolicLinearPoincarePP(torch.nn.Module):
@@ -106,8 +102,6 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -130,7 +124,6 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold",
@@ -144,7 +137,6 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -170,7 +162,7 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         Output: res of shape (B, out_dim)
         """
         if self.input_space == "tangent":
-            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
 
         v = compute_mlr_PoincarePP(self.manifold, x, self.weight, self.bias, self.hyperbolic_axis,
                                    self.clamping_factor, self.smoothing_factor)
@@ -179,6 +171,6 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
         w2 = w.pow(2).sum(axis=self.hyperbolic_axis, keepdim=True) # (B, 1)
         denom = 1 + (1 + self.manifold.c * w2).sqrt() # (B, 1)
         res = w / denom # (B, out_dim)
-        if self.backproject:
+        if self.manifold.backproject:
             res = self.manifold.proj(res, axis=self.hyperbolic_axis)
         return res

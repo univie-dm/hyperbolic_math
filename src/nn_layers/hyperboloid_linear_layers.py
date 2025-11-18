@@ -24,8 +24,6 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -44,7 +42,6 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold"
@@ -56,7 +53,6 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -84,7 +80,7 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
             f"Thus, x needs to be of dimension {(x.shape[0], self.input_dim)} but is of shape {x.shape}"
 
         if self.input_space == "manifold":
-            x = self.manifold.logmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.logmap_0(x, axis=self.hyperbolic_axis)
         else:
             x, = self.manifold._2manifold_dtype([x])
             assert self.manifold.is_in_tangent_space(x, self.manifold._create_origin_from_reference(x, axis=self.hyperbolic_axis), axis=self.hyperbolic_axis)
@@ -94,12 +90,12 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
         x = (x_rem.unsqueeze(-1) * self.weight.T.unsqueeze(0)).sum(dim=1) # (B, out_dim - 1)
         # Since the result needs to lie in the tangent space at the origin we must concatenate the time coordinate back
         x = torch.cat([torch.zeros_like(x[:,:1]), x], dim=1) # (B, out_dim)
-        x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
+        x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis) # (B, out_dim)
 
         # Bias addition
         bias = torch.cat([torch.zeros_like(self.bias[:,:1]), self.bias], dim=1) # (1, out_dim)
-        pt_bias = self.manifold.ptransp_0(bias, x, axis=self.hyperbolic_axis, backproject=self.backproject) # (1, out_dim)
-        res = self.manifold.expmap(pt_bias, x, axis=self.hyperbolic_axis, backproject=self.backproject) # (B, out_dim)
+        pt_bias = self.manifold.ptransp_0(bias, x, axis=self.hyperbolic_axis) # (1, out_dim)
+        res = self.manifold.expmap(pt_bias, x, axis=self.hyperbolic_axis) # (B, out_dim)
         return res
 
 class HyperbolicLinearHyperboloidFHNN(torch.nn.Module):
@@ -121,8 +117,6 @@ class HyperbolicLinearHyperboloidFHNN(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -151,7 +145,6 @@ class HyperbolicLinearHyperboloidFHNN(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold",
@@ -168,7 +161,6 @@ class HyperbolicLinearHyperboloidFHNN(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -203,7 +195,7 @@ class HyperbolicLinearHyperboloidFHNN(torch.nn.Module):
             f"x needs to be of dimension {(x.shape[0], self.input_dim)} but is of shape {x.shape}"
 
         if self.input_space == "tangent":
-            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
         else:
             x, = self.manifold._2manifold_dtype([x])
 
@@ -241,8 +233,6 @@ class HyperbolicLinearHyperboloidFHCNN(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -271,7 +261,6 @@ class HyperbolicLinearHyperboloidFHCNN(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold",
@@ -288,7 +277,6 @@ class HyperbolicLinearHyperboloidFHCNN(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -322,7 +310,7 @@ class HyperbolicLinearHyperboloidFHCNN(torch.nn.Module):
             f"x needs to be of dimension {(x.shape[0], self.input_dim)} but is of shape {x.shape}"
 
         if self.input_space == "tangent":
-            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
         else:
             x, = self.manifold._2manifold_dtype([x])
 

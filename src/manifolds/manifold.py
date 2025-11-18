@@ -11,26 +11,31 @@ class Manifold(torch.nn.Module):
     def __init__(
         self,
         c: torch.Tensor = torch.tensor([1.]),
-        trainable_c: bool = False
+        trainable_c: bool = False,
+        dtype: str | torch.dtype = "float32"
     ):
         super().__init__()
         if trainable_c:
             self.register_parameter('c', torch.nn.Parameter(c, requires_grad=trainable_c))
         else:
             self.register_buffer('c', c)
-        self.min_enorm = None
-        self.max_enorm_eps = None
-        self.dtype = None
+        
+        if dtype == "float32" or dtype == torch.float32:
+            self.dtype = torch.float32
+        elif dtype == "float64" or dtype == torch.float64:
+            self.dtype = torch.float64
+        else:
+            raise ValueError(f"Unsupported dtype: {self.dtype}. Supported dtypes are float32, and float64.")
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """Convert a list of tensor(s) to the manifold dtype."""
         raise NotImplementedError
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
         """Multiply manifold point(s) x with scalar(s) r."""
         raise NotImplementedError
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool, version: str) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, version: str) -> torch.Tensor:
         """Compute the geodesic distance(s) between manifold points x and y."""
         raise NotImplementedError
 
@@ -38,32 +43,32 @@ class Manifold(torch.nn.Module):
         """Compute the geodesic distance(s) of manifold point(s) x from/to the manifold's origin."""
         raise NotImplementedError
 
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
         """Map tangent vector(s) v at manifold point(s) x to the manifold. [Exponential map]"""
         raise NotImplementedError
 
-    def expmap_0(self, v: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, axis: int) -> torch.Tensor:
         """Map tangent vector(s) v at the manifold's origin to the manifold. [Exponential map]"""
         raise NotImplementedError
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
         """Approximately map tangent vector(s) v at manifold point(s) x to the manifold. [Retraction map]"""
         raise NotImplementedError
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
         """Map manifold point(s) y to the tangent space(s) of manifold point(s) x. [Logarithmic map]"""
         raise NotImplementedError
 
-    def logmap_0(self, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int) -> torch.Tensor:
         """Map manifold point(s) y to the tangent space of the manifold's origin. [Logarithmic map]"""
         raise NotImplementedError
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space(s) of
            manifold point(s) x to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int, backproject: bool) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space of
            the manifold's origin to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError

@@ -21,8 +21,6 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -47,7 +45,6 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold",
@@ -60,7 +57,6 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -119,7 +115,7 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         ######################################################
         x, a, p = self.manifold._2manifold_dtype([x, a, p])
         sqrt_c = self.manifold.c.sqrt()
-        diff = self.manifold.addition(-p, x, axis=-1, backproject=self.backproject) # (B, 1, out_dim, in_dim)
+        diff = self.manifold.addition(-p, x, axis=-1) # (B, 1, out_dim, in_dim)
         diff_norm2 = diff.pow(2).sum(dim=-1, keepdim=True).clamp_min(1e-15) # (B, 1, out_dim, 1)
         sc_diff_a = (diff * a).sum(dim=-1, keepdim=True) # (B, 1, out_dim, 1)
         a_norm = a.norm(dim=-1, keepdim=True, p=2) # (out_dim, 1)
@@ -181,7 +177,7 @@ class HyperbolicRegressionPoincareHDRL(torch.nn.Module):
         Output: res of shape (B, out_dim)
         """
         if self.input_space == "tangent":
-            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
 
         # HDRL expands the weights to support multiple spaces at once
         # We don't use this. Instead we feed x of shape (B, on_dim)

@@ -1,9 +1,9 @@
 import torch
 
-from ..manifolds import Manifold, Hyperboloid, PoincareBall
+from ..manifolds import Manifold
 
 
-def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000, version: str='default') -> torch.Tensor:
+def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_size: int=1_000_000, version: str=None) -> torch.Tensor:
     """
     Computes the pairwise distances between points on a given manifold.
 
@@ -16,20 +16,14 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
     batch_size : int (optional)
         The batch size for computing distances in chunks (default: 1_000_000)
     version : str (optional)
-        Version of the geodesic distance to compute (default: "default")
-        For Hyperboloid: ['smoothened'=default, 'normal']
-        For PoincareBall: ['mobius_direct'=default, 'mobius', 'metric_tensor']
+        Version of the geodesic distance to compute (default: None)
+        Defaults to the manifold's instance attribute self.dist_version.
 
     Returns
     -------
     distmat : torch.Tensor
         The tensor containing the pairwise distances between points
     """
-    if not (version == 'default' or
-            (isinstance(manifold, Hyperboloid) and version in ['smoothened', 'normal']) or
-            (isinstance(manifold, PoincareBall) and version in ['mobius_direct', 'mobius', 'metric_tensor'])
-            ):
-        raise ValueError(f"Unsupported version '{version}' for manifold '{manifold.name}'.")
     device = points.device
     distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
     indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)

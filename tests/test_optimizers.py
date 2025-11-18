@@ -15,7 +15,7 @@ def test_riemannian_adam(manifold: Manifold, tolerance: Tuple[float, float],
     start = manifold.scalar_mul(torch.tensor([0.9]), target)
     start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update, backproject=True)
+    optim = RiemannianAdam([start], lr=1e-3, eps=1e-5, expmap_update=expmap_update)
     for _ in range(300_000):
         optim.zero_grad()
         loss = manifold.dist(start, target).pow(2).mean()
@@ -35,7 +35,7 @@ def test_riemannian_sgd(manifold: Manifold, tolerance: Tuple[float, float],
     start = manifold.scalar_mul(torch.tensor([0.3]), target)
     start = ManifoldParameter(start, requires_grad=True, manifold=manifold)
 
-    optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update, backproject=True)
+    optim = RiemannianSGD([start], lr=1e-3, momentum=0.9, expmap_update=expmap_update)
     for _ in range(1000):
         optim.zero_grad()
         loss = manifold.dist(start, target).pow(2).mean()

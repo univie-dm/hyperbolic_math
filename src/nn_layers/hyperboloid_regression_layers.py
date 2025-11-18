@@ -21,8 +21,6 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         Dimension of the output space
     hyperbolic_axis : int
         Axis along which the input tensor is hyperbolic (needs to be -1)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     params_dtype : str
         Data type for the parameters (default: "float32")
     requires_grad : bool
@@ -45,7 +43,6 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         input_dim: int,
         output_dim: int,
         hyperbolic_axis: int = -1,
-        backproject: bool = True,
         params_dtype: str = "float32",
         requires_grad: bool = True,
         input_space: str = "manifold",
@@ -59,7 +56,6 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hyperbolic_axis = hyperbolic_axis
-        self.backproject = backproject
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
@@ -86,7 +82,7 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         Output: res of shape (B, out_dim)
         """
         if self.input_space == "tangent":
-            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis, backproject=self.backproject)
+            x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
 
         res = compute_mlr_Hyperboloid(self.manifold, x, self.weight, self.bias,
                                       self.hyperbolic_axis, self.clamping_factor, self.smoothing_factor)

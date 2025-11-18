@@ -15,19 +15,23 @@ class Hyperboloid(Manifold):
         c: torch.Tensor = torch.tensor([1.]),
         trainable_c: bool = False,
         dtype: str | torch.dtype = "float32",
+        backproject: bool = True,
+        **kwargs
     ):
-        super().__init__(c, trainable_c)
+        super().__init__(c, trainable_c, dtype=dtype)
         self.name = "Hyperboloid"
+        self.backproject = backproject
 
         # The following parameters are derived from the unittests
-        if dtype == "float32" or dtype == torch.float32:
-            self.dtype = torch.float32
+        if self.dtype == torch.float32:
             self.min_enorm = 1e-15
-        elif dtype == "float64" or dtype == torch.float64:
-            self.dtype = torch.float64
+        elif self.dtype == torch.float64:
             self.min_enorm = 1e-15
-        else:
-            raise ValueError(f"Unsupported dtype: {dtype}. Supported dtypes are float32 and float64.")
+
+        # Store version configurations from kwargs
+        self.scalar_mul_version = kwargs.get('scalar_mul_version', 'default') # 'default' or 'smoothened'
+        self.dist_version = kwargs.get('dist_version', 'default') # 'default' or 'smoothened'
+        self.logmap_version = kwargs.get('logmap_version', 'default') # 'default' or 'smoothened'
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """
@@ -127,7 +131,7 @@ class Hyperboloid(Manifold):
         res[tuple(slicing)] = 1 / self.c.sqrt()
         return res
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
         """
         Multiply Hyperboloid point(s) x with scalar(s) r.
 
@@ -139,22 +143,23 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the scalar multiplication (default: -1)
-        backproject : bool
-            Whether to project results back to the Hyperboloid (default: True)
+        **kwargs : dict
+            Additional parameters, including 'version' for geodesic distance computation (default: uses instance attribute)
 
         Returns
         -------
         res : torch.Tensor (dtype=self.dtype)
             The product(s) of r and x
         """
+        version = kwargs.get('version', self.scalar_mul_version)
         r, x = self._2manifold_dtype([r, x])
-        log0_x = self.logmap_0(x, axis=axis)
+        log0_x = self.logmap_0(x, axis=axis, version=version)
         unit_tangent = log0_x / (self._minkowski_inner(log0_x, log0_x, axis=axis).sqrt()).clamp_min(self.min_enorm)
-        tangent = r * self.dist_0(x, axis=axis, version="normal") * unit_tangent
-        res = self.expmap_0(tangent, axis=axis, backproject=backproject)
+        tangent = r * self.dist_0(x, axis=axis, version=version) * unit_tangent
+        res = self.expmap_0(tangent, axis=axis)
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, version: str="smoothened") -> torch.Tensor:
+    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, version: str=None) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Hyperboloid point(s) x and y.
 
@@ -167,10 +172,11 @@ class Hyperboloid(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "smoothened")
+            Version of the geodesic distance to compute (default: uses instance attribute)
             Options:
-            - 'normal': Normal geodesic distance
-            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance (better convergence)
+            - 'default': Normal geodesic distance
+            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance
+                            (better convergence if used as part of an optimization objective)
 
         Returns
         -------
@@ -182,14 +188,21 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
+        if version is None:
+            version = self.dist_version
         x, y = self._2manifold_dtype([x, y])
-        acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
-        if version in ["smoothened", "default"]:
+        if version == "default":
+            acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
+            res = acosh(acosh_arg) / self.c.sqrt()
+        elif version == "smoothened":
+            acosh_arg = -self.c * self._minkowski_inner(x, y, axis=axis)
             acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
-        res = acosh(acosh_arg) / self.c.sqrt()
+            res = acosh(acosh_arg) / self.c.sqrt()
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
 
-    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str="smoothened") -> torch.Tensor:
+    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str=None) -> torch.Tensor:
         """
         Compute the geodesic distance(s) of Hyperboloid point(s) x from/to the Hyperboloid origin.
 
@@ -200,10 +213,11 @@ class Hyperboloid(Manifold):
         axis : int
             Axis along which to compute the geodesic distance (default: -1)
         version : str
-            Version of the geodesic distance to compute (default: "smoothened")
+            Version of the geodesic distance to compute (default: uses instance attribute)
             Options:
-            - 'normal': Normal geodesic distance
-            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance (better convergence)
+            - 'default': Normal geodesic distance
+            - 'smoothened': Smoothly clamps the acosh input before computing the geodesic distance
+                            (better convergence if used as part of an optimization objective)
 
         Returns
         -------
@@ -215,15 +229,23 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
+        if version is None:
+            version = self.dist_version
         x, = self._2manifold_dtype([x])
-        x0 = x.narrow(axis, 0, 1)
-        acosh_arg = self.c.sqrt() * x0
-        if version in ["smoothened", "default"]:
+        if version == "default":
+            x0 = x.narrow(axis, 0, 1)
+            acosh_arg = self.c.sqrt() * x0
+            res = acosh(acosh_arg) / self.c.sqrt()
+        elif version == "smoothened":
+            x0 = x.narrow(axis, 0, 1)
+            acosh_arg = self.c.sqrt() * x0
             acosh_arg = smooth_clamp_min(acosh_arg, 1.0)
-        res = acosh(acosh_arg) / self.c.sqrt()
+            res = acosh(acosh_arg) / self.c.sqrt()
+        else:
+            raise ValueError(f"Unknown version: {version}")
         return res
 
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         Map tangent vector(s) v at Hyperboloid point(s) x to the Hyperboloid.
         [Exponential map]
@@ -236,8 +258,6 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the exponential map (default: -1)
-        backproject : bool
-            Whether to project results back to the Hyperboloid (default: True)
 
         Returns
         -------
@@ -253,11 +273,11 @@ class Hyperboloid(Manifold):
         v_norm = self._minkowski_norm(v, axis=axis)
         c_norm_prod = self.c.sqrt() * v_norm
         res = cosh(c_norm_prod) * x + sinh(c_norm_prod) / c_norm_prod.clamp_min(self.min_enorm) * v
-        if backproject:
+        if self.backproject:
             res = self.proj(res, axis=axis)
         return res
 
-    def expmap_0(self, v: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         Map tangent vector(s) v at the Hyperboloid origin to the Hyperboloid.
         [Exponential map]
@@ -268,8 +288,6 @@ class Hyperboloid(Manifold):
             Vector(s) in the tangent space of the Hyperboloid origin
         axis : int
             Axis along which to compute the exponential map (default: -1)
-        backproject : bool
-            Whether to project results back to the Hyperboloid (default: True)
 
         Returns
         -------
@@ -288,11 +306,11 @@ class Hyperboloid(Manifold):
         res0 = cosh(c_norm_prod) / self.c.sqrt() + sinh_scale * v.narrow(axis, 0, 1)
         res_rem = sinh_scale * v.narrow(axis, 1, v.shape[axis]-1)
         res = torch.cat((res0, res_rem), dim=axis)
-        if backproject:
+        if self.backproject:
             res = self.proj(res, axis=axis)
         return res
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         First-order approximation of the exponential map for vector(s) v at Hyperboloid point(s) x.
         [Retraction map]
@@ -306,7 +324,7 @@ class Hyperboloid(Manifold):
         axis : int
             Axis along which to compute the backprojection of the retraction (default: -1)
         backproject : bool
-            Whether to project results back to the Hyperboloid (default: True)
+            Whether to project results back to the Hyperboloid (default: uses instance attribute)
 
         Returns
         -------
@@ -320,11 +338,11 @@ class Hyperboloid(Manifold):
         """
         v, x = self._2manifold_dtype([v, x])
         res = x + v
-        if backproject:
+        if self.backproject:
             res = self.proj(res, axis=axis)
         return res
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
         """
         Map Hyperboloid point(s) y to the tangent space(s) of Hyperboloid point(s) x.
         [Logarithmic map]
@@ -337,8 +355,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the logarithmic map (default: -1)
-        backproject : bool
-            Whether to project the results onto the tangent space(s) of x (default: True)
+        **kwargs : dict
+            Additional parameters, including 'version' for geodesic distance computation (default: uses instance attribute)
 
         Returns
         -------
@@ -350,16 +368,17 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
+        version = kwargs.get('version', self.logmap_version)
         y, x = self._2manifold_dtype([y, x])
-        dist = self.dist(x, y, axis=axis)
+        dist = self.dist(x, y, axis=axis, version=version)
         num = y + self.c * self._minkowski_inner(x, y, axis=axis) * x
         denom = self._minkowski_norm(num, axis=axis)
         res = dist * num / denom
-        if backproject:
+        if self.backproject:
             res = self.tangent_proj(res, x, axis=axis)
         return res
 
-    def logmap_0(self, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
         """
         Map Hyperboloid point(s) y to the tangent space of the Hyperboloid origin.
         [Logarithmic map]
@@ -370,8 +389,8 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the logarithmic map (default: -1)
-        backproject : bool
-            Whether to project the results onto the tangent space of the Hyperboloid origin (default: True)
+        **kwargs : dict
+            Additional parameters, including 'version' for geodesic distance computation (default: uses instance attribute)
 
         Returns
         -------
@@ -383,17 +402,18 @@ class Hyperboloid(Manifold):
         Ines Chami, et al. "Hyperbolic graph convolutional neural networks."
             Advances in neural information processing systems 32 (2019).
         """
+        version = kwargs.get('version', self.logmap_version)
         y, = self._2manifold_dtype([y])
         y_rem = y.narrow(axis, 1, y.shape[axis]-1)
         y_rem_norm = y_rem.norm(p=2, dim=axis, keepdim=True)
-        scale = self.dist_0(y, axis=axis) / y_rem_norm.clamp_min(self.min_enorm)
+        scale = self.dist_0(y, axis=axis, version=version) / y_rem_norm.clamp_min(self.min_enorm)
         res = torch.cat((torch.zeros_like(y.narrow(axis, 0, 1)), scale * y_rem), dim=axis)
-        if backproject:
+        if self.backproject:
             origin = self._create_origin_from_reference(res, axis=axis)
             res = self.tangent_proj(res, origin, axis=axis)
         return res
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space(s) of
         Hyperboloid point(s) x to the tangent space(s) of Hyperboloid point(s) y.
@@ -408,8 +428,6 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the parallel transport (default: -1)
-        backproject : bool
-            Whether to project the results onto the tangent space(s) of y (default: True)
 
         Returns
         -------
@@ -427,11 +445,11 @@ class Hyperboloid(Manifold):
         denom = 1 / self.c - xy
         scale = vy / denom.clamp_min(self.min_enorm)
         res = v + scale * (x + y)
-        if backproject:
+        if self.backproject:
             res = self.tangent_proj(res, y, axis=axis)
         return res
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1, backproject: bool=True) -> torch.Tensor:
+    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space of the
         Hyperboloid origin to the tangent space(s) of Hyperboloid point(s) y.
@@ -444,8 +462,6 @@ class Hyperboloid(Manifold):
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the parallel transport (default: -1)
-        backproject : bool
-            Whether to project the results onto the tangent space(s) of y (default: True)
 
         Returns
         -------
@@ -467,7 +483,7 @@ class Hyperboloid(Manifold):
         denom = 1 / self.c + y0 / self.c.sqrt()
         scale = vy / denom
         res = v + scale * (y + origin)
-        if backproject:
+        if self.backproject:
             res = self.tangent_proj(res, y, axis=axis)
         return res
 
@@ -513,7 +529,7 @@ class Hyperboloid(Manifold):
         ----------
         v : torch.Tensor
             Vector(s) in the tangent space(s) of x
-        x : torch.Tensor
+        x : torch.Tensor (ignored)
             Hyperboloid point(s)
         axis : int
             Axis along which to compute the tangent norm (default: -1)

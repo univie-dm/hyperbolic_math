@@ -26,25 +26,21 @@ class RiemannianAdam(torch.optim.Adam):
     weight_decay : float (optional)
         Weight decay (L2 penalty) (default: 0)
     amsgrad : bool (optional)
-        Whether to use the AMSGrad variant of this algorithm
-        from the paper `On the Convergence of Adam and Beyond`_ (default: False)
+        Whether to use the AMSGrad variant of this algorithm (default: False)
 
     Other Parameters
     ----------------
     expmap_update : bool
         Update the parameters with exponential map instead of retraction (default: False)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     hyperbolic_axis : int
         Axis along which the parameters are hyperbolic (default: -1)
-
-    .. _On the Convergence of Adam and Beyond:
-        https://openreview.net/forum?id=ryQu7f-RZ
 
     References
     ----------
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
         arXiv (2020).
+    Sashank J. Reddi, Satyen Kale, and Sanjiv Kumar. "On the convergence of adam and beyond."
+        arXiv preprint arXiv:1904.09237 (2019).
     """
     def __init__(
         self,
@@ -55,7 +51,6 @@ class RiemannianAdam(torch.optim.Adam):
         weight_decay: float = 0,
         amsgrad: bool = False,
         expmap_update: bool = False,
-        backproject: bool = True,
         hyperbolic_axis: int = -1
     ):
         if not 0.0 <= lr:
@@ -78,7 +73,6 @@ class RiemannianAdam(torch.optim.Adam):
         )
         super().__init__(params, **defaults)
         self.expmap_update = expmap_update
-        self.backproject = backproject
         self.hyperbolic_axis = hyperbolic_axis
 
     def step(self, closure=None) -> None:
@@ -148,10 +142,10 @@ class RiemannianAdam(torch.optim.Adam):
 
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis, backproject=self.backproject)
+                        new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * direction, point, axis=self.hyperbolic_axis, backproject=self.backproject)
+                        new_point = manifold.retraction(-learning_rate * direction, point, axis=self.hyperbolic_axis)
                     # Parallel transport the exponential averaging to the new point
                     exp_avg_new = manifold.ptransp(exp_avg, point, new_point, axis=self.hyperbolic_axis)
                     # Use copy only for user facing point

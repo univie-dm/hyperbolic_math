@@ -31,8 +31,6 @@ class RiemannianSGD(torch.optim.Optimizer):
     ----------------
     expmap_update : bool
         Update the parameters with exponential map instead of retraction (default: False)
-    backproject : bool
-        Whether to project results back to the manifold (default: True)
     hyperbolic_axis : int
         Axis along which the parameters are hyperbolic (default: -1)
 
@@ -50,7 +48,6 @@ class RiemannianSGD(torch.optim.Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
         expmap_update: bool = False,
-        backproject: bool = True,
         hyperbolic_axis: int = -1
     ):
         if lr < 0.0:
@@ -71,7 +68,6 @@ class RiemannianSGD(torch.optim.Optimizer):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super().__init__(params, defaults)
         self.expmap_update = expmap_update
-        self.backproject = backproject
         self.hyperbolic_axis = hyperbolic_axis
 
     def step(self, closure=None) -> None:
@@ -118,10 +114,10 @@ class RiemannianSGD(torch.optim.Optimizer):
 
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis, backproject=self.backproject)
+                        new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis)
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis, backproject=self.backproject)
+                        new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis)
 
                     if momentum > 0:
                         # Parallel transport the momentum to the new point
