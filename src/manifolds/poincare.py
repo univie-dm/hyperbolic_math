@@ -76,6 +76,7 @@ class PoincareBall(Manifold):
         Stability
         ---------
         Roughly bounded from above by 1/(c.sqrt()*self.max_enorm_eps)
+        The clamping is derived by capping the maximum euclidean norm of x to 1/c.sqrt() - self.max_enorm_eps
         """
         x, = self._2manifold_dtype([x])
         x2 = x.pow(2).sum(dim=axis, keepdim=True)
@@ -766,9 +767,15 @@ class PoincareBall(Manifold):
         -------
         res : torch.Tensor (dtype=self.dtype)
             The Hyperboloid point(s)
+
+        Stability
+        ---------
+        The clamps are derived by capping the maximum euclidean norm of x to 1/c.sqrt() - self.max_enorm_eps
         """
         x, = self._2manifold_dtype([x])
         cx2 = self.c * x.pow(2).sum(dim=axis, keepdim=True)
+        # Stable clipping of the max_enorm to 1/c.sqrt()-self.max_enorm_eps
+        cx2 = cx2.clamp_max(1 - 2 * self.c.sqrt() * self.max_enorm_eps + self.c * self.max_enorm_eps ** 2)
         res0 = (1. + cx2) / self.c.sqrt()
         res = torch.cat([res0, 2 * x], dim=axis)
         res = res / (1. - cx2)
