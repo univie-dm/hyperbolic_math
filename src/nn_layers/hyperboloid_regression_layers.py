@@ -37,6 +37,7 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
     Ahmad Bdeir, Kristian Schwethelm, and Niels Landwehr. "Fully hyperbolic convolutional neural networks for computer vision."
         arXiv preprint arXiv:2303.15919 (2023).
     """
+
     def __init__(
         self,
         manifold: Hyperboloid,
@@ -47,11 +48,15 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         requires_grad: bool = True,
         input_space: str = "manifold",
         clamping_factor: float = 1.0,
-        smoothing_factor: float = 50.0
+        smoothing_factor: float = 50.0,
     ):
         super().__init__()
-        assert isinstance(manifold, Hyperboloid), "manifold must be an instance of Hyperboloid"
-        assert hyperbolic_axis == -1, "hyperbolic_axis must be -1, reshape your tensor accordingly."
+        assert isinstance(manifold, Hyperboloid), (
+            "manifold must be an instance of Hyperboloid"
+        )
+        assert hyperbolic_axis == -1, (
+            "hyperbolic_axis must be -1, reshape your tensor accordingly."
+        )
         self.manifold = manifold
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -59,17 +64,21 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
 
         self.params_dtype = get_torch_dtype(params_dtype)
         if torch.finfo(self.params_dtype).eps < torch.finfo(manifold.dtype).eps:
-            print(f"Warning: HyperbolicLayer.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
-                  f"All manifold operations will be performed in lower precision {manifold.dtype}!")
+            print(
+                f"Warning: HyperbolicLayer.params_dtype is {self.params_dtype}, but Manifold.dtype is {manifold.dtype}."
+                f"All manifold operations will be performed in lower precision {manifold.dtype}!"
+            )
 
         self.requires_grad = requires_grad
         # weight lies in the tangent space of the Hyperboloid origin, so the time coordinate along self.hyperbolic_axis is zero
-        weight = torch.randn((output_dim, input_dim-1), dtype=self.params_dtype)
+        weight = torch.randn((output_dim, input_dim - 1), dtype=self.params_dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
         bias = torch.zeros((self.output_dim, 1), dtype=self.params_dtype)
         self.bias = torch.nn.Parameter(bias, requires_grad=self.requires_grad)
 
-        assert input_space in ["tangent", "manifold"], "input_space must be either 'tangent' or 'manifold'"
+        assert input_space in ["tangent", "manifold"], (
+            "input_space must be either 'tangent' or 'manifold'"
+        )
         self.input_space = input_space
 
         self.clamping_factor = clamping_factor
@@ -84,6 +93,13 @@ class HyperbolicRegressionHyperboloid(torch.nn.Module):
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
 
-        res = compute_mlr_Hyperboloid(self.manifold, x, self.weight, self.bias,
-                                      self.hyperbolic_axis, self.clamping_factor, self.smoothing_factor)
+        res = compute_mlr_Hyperboloid(
+            self.manifold,
+            x,
+            self.weight,
+            self.bias,
+            self.hyperbolic_axis,
+            self.clamping_factor,
+            self.smoothing_factor,
+        )
         return res

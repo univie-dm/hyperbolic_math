@@ -42,6 +42,7 @@ class RiemannianAdam(torch.optim.Adam):
     Sashank J. Reddi, Satyen Kale, and Sanjiv Kumar. "On the convergence of adam and beyond."
         arXiv preprint arXiv:1904.09237 (2019).
     """
+
     def __init__(
         self,
         params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]],
@@ -51,7 +52,7 @@ class RiemannianAdam(torch.optim.Adam):
         weight_decay: float = 0,
         amsgrad: bool = False,
         expmap_update: bool = False,
-        hyperbolic_axis: int = -1
+        hyperbolic_axis: int = -1,
     ):
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -92,7 +93,9 @@ class RiemannianAdam(torch.optim.Adam):
                         continue
 
                     # Flag for hyperbolic parameters
-                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
+                    param_is_hyperbolic = isinstance(
+                        point, ManifoldParameter
+                    ) and not isinstance(point.manifold, Euclidean)
                     if param_is_hyperbolic:
                         manifold = point.manifold
                     else:
@@ -120,7 +123,9 @@ class RiemannianAdam(torch.optim.Adam):
 
                     if param_is_hyperbolic:
                         # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
-                        exp_avg_sq_new = manifold.tangent_inner(grad, grad, point, axis=self.hyperbolic_axis)
+                        exp_avg_sq_new = manifold.tangent_inner(
+                            grad, grad, point, axis=self.hyperbolic_axis
+                        )
                         exp_avg_sq_new = exp_avg_sq_new.to(grad.dtype)
                     else:
                         # Euclidean parameter: Compute grad^2 component-wise
@@ -142,12 +147,18 @@ class RiemannianAdam(torch.optim.Adam):
 
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis)
+                        new_point = manifold.expmap(
+                            -learning_rate * direction, point, axis=self.hyperbolic_axis
+                        )
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * direction, point, axis=self.hyperbolic_axis)
+                        new_point = manifold.retraction(
+                            -learning_rate * direction, point, axis=self.hyperbolic_axis
+                        )
                     # Parallel transport the exponential averaging to the new point
-                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, axis=self.hyperbolic_axis)
+                    exp_avg_new = manifold.ptransp(
+                        exp_avg, point, new_point, axis=self.hyperbolic_axis
+                    )
                     # Use copy only for user facing point
                     new_point = new_point.to(point.dtype)
                     exp_avg_new = exp_avg_new.to(exp_avg.dtype)

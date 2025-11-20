@@ -39,6 +39,7 @@ class RiemannianSGD(torch.optim.Optimizer):
     Max Kochurov, Rasul Karimov and Serge Kozlukov. "Geoopt: Riemannian Optimization in PyTorch."
         arXiv (2020).
     """
+
     def __init__(
         self,
         params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]],
@@ -48,7 +49,7 @@ class RiemannianSGD(torch.optim.Optimizer):
         weight_decay: float = 0,
         nesterov: bool = False,
         expmap_update: bool = False,
-        hyperbolic_axis: int = -1
+        hyperbolic_axis: int = -1,
     ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -114,15 +115,23 @@ class RiemannianSGD(torch.optim.Optimizer):
 
                     if self.expmap_update:
                         # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis)
+                        new_point = manifold.expmap(
+                            -learning_rate * grad, point, axis=self.hyperbolic_axis
+                        )
                     else:
                         # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis)
+                        new_point = manifold.retraction(
+                            -learning_rate * grad, point, axis=self.hyperbolic_axis
+                        )
 
                     if momentum > 0:
                         # Parallel transport the momentum to the new point
-                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, axis=self.hyperbolic_axis)
-                        new_momentum_buffer = new_momentum_buffer.to(momentum_buffer.dtype)
+                        new_momentum_buffer = manifold.ptransp(
+                            momentum_buffer, point, new_point, axis=self.hyperbolic_axis
+                        )
+                        new_momentum_buffer = new_momentum_buffer.to(
+                            momentum_buffer.dtype
+                        )
                         momentum_buffer.copy_(new_momentum_buffer)
                     # Use copy only for user facing point
                     new_point = new_point.to(point.dtype)

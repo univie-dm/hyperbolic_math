@@ -8,24 +8,29 @@ class Manifold(torch.nn.Module):
     """
     Abstract manifold class.
     """
+
     def __init__(
         self,
-        c: torch.Tensor = torch.tensor([1.]),
+        c: torch.Tensor = torch.tensor([1.0]),
         trainable_c: bool = False,
-        dtype: str | torch.dtype = "float32"
+        dtype: str | torch.dtype = "float32",
     ):
         super().__init__()
         if trainable_c:
-            self.register_parameter('c', torch.nn.Parameter(c, requires_grad=trainable_c))
+            self.register_parameter(
+                "c", torch.nn.Parameter(c, requires_grad=trainable_c)
+            )
         else:
-            self.register_buffer('c', c)
-        
+            self.register_buffer("c", c)
+
         if dtype == "float32" or dtype == torch.float32:
             self.dtype = torch.float32
         elif dtype == "float64" or dtype == torch.float64:
             self.dtype = torch.float64
         else:
-            raise ValueError(f"Unsupported dtype: {self.dtype}. Supported dtypes are float32, and float64.")
+            raise ValueError(
+                f"Unsupported dtype: {self.dtype}. Supported dtypes are float32, and float64."
+            )
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
         """Convert a list of tensor(s) to the manifold dtype."""
@@ -35,7 +40,9 @@ class Manifold(torch.nn.Module):
         """Multiply manifold point(s) x with scalar(s) r."""
         raise NotImplementedError
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int, version: str) -> torch.Tensor:
+    def dist(
+        self, x: torch.Tensor, y: torch.Tensor, axis: int, version: str
+    ) -> torch.Tensor:
         """Compute the geodesic distance(s) between manifold points x and y."""
         raise NotImplementedError
 
@@ -63,27 +70,33 @@ class Manifold(torch.nn.Module):
         """Map manifold point(s) y to the tangent space of the manifold's origin. [Logarithmic map]"""
         raise NotImplementedError
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
+    def ptransp(
+        self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int
+    ) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space(s) of
-           manifold point(s) x to the tangent space(s) of manifold point(s) y."""
+        manifold point(s) x to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
 
     def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int) -> torch.Tensor:
         """Parallel transport tangent vector(s) v from the tangent space of
-           the manifold's origin to the tangent space(s) of manifold point(s) y."""
+        the manifold's origin to the tangent space(s) of manifold point(s) y."""
         raise NotImplementedError
 
-    def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
+    def tangent_inner(
+        self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int
+    ) -> torch.Tensor:
         """Compute the inner product(s) between tangent vectors u and v of the tangent space(s)
-           at manifold point(s) x with respect to the Riemannian metric of the manifold."""
+        at manifold point(s) x with respect to the Riemannian metric of the manifold."""
         raise NotImplementedError
 
     def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
         """Compute the norm(s) of tangent vector(s) v of the tangent space(s) at manifold point(s) x
-           with respect to the Riemannian metric of the manifold."""
+        with respect to the Riemannian metric of the manifold."""
         raise NotImplementedError
 
-    def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, axis: int) -> torch.Tensor:
+    def egrad2rgrad(
+        self, grad: torch.Tensor, x: torch.Tensor, axis: int
+    ) -> torch.Tensor:
         """Compute the Riemannian gradient(s) at manifold point(s) x from the Euclidean gradient(s)."""
         raise NotImplementedError
 
@@ -114,7 +127,10 @@ class ManifoldParameter(torch.nn.Parameter):
         self.manifold = manifold
 
     def __repr__(self) -> str:
-        return f"{self.manifold.name} Parameter containing:\n" + super(torch.nn.Parameter, self).__repr__()
+        return (
+            f"{self.manifold.name} Parameter containing:\n"
+            + super(torch.nn.Parameter, self).__repr__()
+        )
 
     def __deepcopy__(self, memo):
         # Deep copy the data

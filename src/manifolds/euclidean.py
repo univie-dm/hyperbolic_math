@@ -8,12 +8,9 @@ class Euclidean(Manifold):
     """
     Euclidean manifold class.
     """
-    def __init__(
-        self,
-        dtype: str | torch.dtype = "float32",
-        **kwargs
-    ):
-        super().__init__(torch.tensor([0.]), trainable_c=False, dtype=dtype)
+
+    def __init__(self, dtype: str | torch.dtype = "float32", **kwargs):
+        super().__init__(torch.tensor([0.0]), trainable_c=False, dtype=dtype)
         self.name = "Euclidean"
 
     def _2manifold_dtype(self, xs: List[torch.Tensor]) -> List[torch.Tensor]:
@@ -35,7 +32,9 @@ class Euclidean(Manifold):
             return xs
         return [x if x.dtype == self.dtype else x.to(self.dtype) for x in xs]
 
-    def addition(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def addition(
+        self, x: torch.Tensor, y: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Add Euclidean manifold point(s) y to Euclidean manifold point(s) x.
 
@@ -57,7 +56,9 @@ class Euclidean(Manifold):
         res = x + y
         return res
 
-    def scalar_mul(self, r: torch.Tensor, x: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
+    def scalar_mul(
+        self, r: torch.Tensor, x: torch.Tensor, axis: int = -1, **kwargs
+    ) -> torch.Tensor:
         """
         Multiply Euclidean manifold point(s) x with scalar(s) r.
 
@@ -81,7 +82,9 @@ class Euclidean(Manifold):
         res = r * x
         return res
 
-    def dist(self, x: torch.Tensor, y: torch.Tensor, axis: int=-1, version: str=None) -> torch.Tensor:
+    def dist(
+        self, x: torch.Tensor, y: torch.Tensor, axis: int = -1, version: str = None
+    ) -> torch.Tensor:
         """
         Compute the geodesic distance(s) between Euclidean manifold points x and y.
 
@@ -105,7 +108,9 @@ class Euclidean(Manifold):
         res = (x - y).norm(p=2, dim=axis, keepdim=True)
         return res
 
-    def dist_0(self, x: torch.Tensor, axis: int=-1, version: str=None) -> torch.Tensor:
+    def dist_0(
+        self, x: torch.Tensor, axis: int = -1, version: str = None
+    ) -> torch.Tensor:
         """
         Compute the geodesic distance(s) of Euclidean manifold point(s) x from/to the Euclidean origin.
 
@@ -123,11 +128,11 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The geodesic distance(s) of x from/to the Euclidean origin
         """
-        x, = self._2manifold_dtype([x])
+        (x,) = self._2manifold_dtype([x])
         res = x.norm(p=2, dim=axis, keepdim=True)
         return res
 
-    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def expmap(self, v: torch.Tensor, x: torch.Tensor, axis: int = -1) -> torch.Tensor:
         """
         Map tangent vector(s) v at Euclidean manifold point(s) x to the Euclidean manifold.
         [Exponential map]
@@ -150,7 +155,7 @@ class Euclidean(Manifold):
         res = x + v
         return res
 
-    def expmap_0(self, v: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def expmap_0(self, v: torch.Tensor, axis: int = -1) -> torch.Tensor:
         """
         Map tangent vector(s) v at the Euclidean origin to the Euclidean manifold.
         [Exponential map]
@@ -167,11 +172,13 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The point(s) after mapping v to the Euclidean manifold
         """
-        v, = self._2manifold_dtype([v])
+        (v,) = self._2manifold_dtype([v])
         res = v
         return res
 
-    def retraction(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def retraction(
+        self, v: torch.Tensor, x: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         First-order approximation of the exponential map for vector(s) v at Euclidean manifold point(s) x.
         [Retraction map]
@@ -194,7 +201,9 @@ class Euclidean(Manifold):
         res = x + v
         return res
 
-    def logmap(self, y: torch.Tensor, x: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
+    def logmap(
+        self, y: torch.Tensor, x: torch.Tensor, axis: int = -1, **kwargs
+    ) -> torch.Tensor:
         """
         Map Euclidean manifold point(s) y to the tangent space(s) of Euclidean manifold point(s) x.
         [Logarithmic map]
@@ -219,7 +228,7 @@ class Euclidean(Manifold):
         res = y - x
         return res
 
-    def logmap_0(self, y: torch.Tensor, axis: int=-1, **kwargs) -> torch.Tensor:
+    def logmap_0(self, y: torch.Tensor, axis: int = -1, **kwargs) -> torch.Tensor:
         """
         Map Euclidean manifold point(s) y to the tangent space of the Euclidean origin.
         [Logarithmic map]
@@ -238,11 +247,13 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The resulting tangent vector(s) after mapping y to the tangent space of the origin
         """
-        y, = self._2manifold_dtype([y])
+        (y,) = self._2manifold_dtype([y])
         res = y
         return res
 
-    def ptransp(self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp(
+        self, v: torch.Tensor, x: torch.Tensor, y: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space(s) of Euclidean
         manifold point(s) x to the tangent space(s) of Euclidean manifold point(s) y.
@@ -263,11 +274,13 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
         """
-        v, = self._2manifold_dtype([v])
+        (v,) = self._2manifold_dtype([v])
         res = v
         return res
 
-    def ptransp_0(self, v: torch.Tensor, y: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def ptransp_0(
+        self, v: torch.Tensor, y: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Parallel transport tangent vector(s) v from the tangent space of
         the Euclidean origin to the tangent space(s) of Euclidean manifold point(s) y.
@@ -286,11 +299,13 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The parallel transported tangent vector(s)
         """
-        v, = self._2manifold_dtype([v])
+        (v,) = self._2manifold_dtype([v])
         res = v
         return res
 
-    def tangent_inner(self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def tangent_inner(
+        self, u: torch.Tensor, v: torch.Tensor, x: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Compute the inner product(s) between tangent vectors u and v of the tangent space(s)
         at Euclidean manifold point(s) x with respect to the Riemannian metric of the Euclidean manifold.
@@ -315,7 +330,9 @@ class Euclidean(Manifold):
         res = (u * v).sum(dim=axis, keepdim=True)
         return res
 
-    def tangent_norm(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def tangent_norm(
+        self, v: torch.Tensor, x: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Compute the norm(s) of tangent vector(s) v of the tangent space(s) at Euclidean manifold point(s) x
         with respect to the Riemannian metric of the Euclidean manifold.
@@ -334,11 +351,13 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The tangent norm(s) of v
         """
-        v, = self._2manifold_dtype([v])
+        (v,) = self._2manifold_dtype([v])
         res = v.norm(p=2, dim=axis, keepdim=True)
         return res
 
-    def egrad2rgrad(self, grad: torch.Tensor, x: torch.Tensor, axis: int=-1) -> torch.Tensor:
+    def egrad2rgrad(
+        self, grad: torch.Tensor, x: torch.Tensor, axis: int = -1
+    ) -> torch.Tensor:
         """
         Compute the Riemannian gradient(s) at Euclidean manifold point(s) x from the Euclidean gradient(s).
 
@@ -359,7 +378,7 @@ class Euclidean(Manifold):
         res = grad
         return res
 
-    def proj(self, x: torch.Tensor, axis: int=-1):
+    def proj(self, x: torch.Tensor, axis: int = -1):
         """
         Project point(s) x onto the Euclidean manifold.
 
@@ -375,11 +394,11 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The projected Euclidean manifold point(s)
         """
-        x, = self._2manifold_dtype([x])
+        (x,) = self._2manifold_dtype([x])
         res = x
         return res
 
-    def tangent_proj(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1):
+    def tangent_proj(self, v: torch.Tensor, x: torch.Tensor, axis: int = -1):
         """
         Project point(s) v onto the tangent space(s) of Euclidean manifold point(s) x.
 
@@ -397,11 +416,11 @@ class Euclidean(Manifold):
         res : torch.Tensor (dtype=self.dtype)
             The projected tangent vector(s)
         """
-        v, = self._2manifold_dtype([v])
+        (v,) = self._2manifold_dtype([v])
         res = v
         return res
 
-    def is_in_manifold(self, x: torch.Tensor, axis: int=-1) -> bool:
+    def is_in_manifold(self, x: torch.Tensor, axis: int = -1) -> bool:
         """
         Check if point(s) x lie in the Euclidean manifold.
 
@@ -420,7 +439,9 @@ class Euclidean(Manifold):
         res = True
         return res
 
-    def is_in_tangent_space(self, v: torch.Tensor, x: torch.Tensor, axis: int=-1) -> bool:
+    def is_in_tangent_space(
+        self, v: torch.Tensor, x: torch.Tensor, axis: int = -1
+    ) -> bool:
         """
         Check if vector(s) v belong to the tangent space(s) at Euclidean manifold point(s) x.
 
