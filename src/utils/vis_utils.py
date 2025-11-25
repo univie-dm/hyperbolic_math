@@ -6,7 +6,7 @@ import numpy.typing as npt
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
 from typing import Dict, List, Tuple, Union
-from .horo_pca import HoroPCA, compute_frechet_mean, center_data
+from .horo_pca import HoroPCA, compute_frechet_mean, frechet_center_data
 from ..manifolds import Manifold, Hyperboloid, PoincareBall
 
 
@@ -138,14 +138,14 @@ def pointsTo2dPoincare(x: torch.Tensor, poincare: PoincareBall,
             hyperplanes = model.transform(hyperplanes).detach()
     elif settings['dim_red_method'] == 'tangent PCA':
         mean = compute_frechet_mean(x, hyperboloid)
-        x = center_data(x, mean, hyperboloid)
+        x = frechet_center_data(x, mean, hyperboloid)
         x = hyperboloid.to_poincare(x)
         x_tangent = poincare.logmap_0(x).cpu()
         model = PCA(n_components=2).fit(x_tangent)
         x_tangent = torch.from_numpy(model.transform(x_tangent))
         x = poincare.expmap_0(x_tangent.to(poincare.c.device))
         if hyperplanes is not None:
-            hyperplanes = center_data(hyperplanes, mean, hyperboloid)
+            hyperplanes = frechet_center_data(hyperplanes, mean, hyperboloid)
             hyperplanes = hyperboloid.to_poincare(hyperplanes)
             hyperplanes_tangent = poincare.logmap_0(hyperplanes).cpu()
             hyperplanes_tangent = torch.from_numpy(model.transform(hyperplanes_tangent))
