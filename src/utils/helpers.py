@@ -25,8 +25,8 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The tensor containing the pairwise distances between points
     """
     device = points.device
-    distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
-    indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
+    distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype, device=device)
+    indices = torch.triu_indices(points.shape[0], points.shape[0], 1, device=device)
     while indices.shape[1] > 0:
         dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]], version=version).reshape(-1)
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
@@ -93,11 +93,10 @@ def compute_hyperbolic_delta(distmat: torch.Tensor, version: str, batch_size: in
     distmat_i0 = distmat[:,0].expand(distmat.shape[0], distmat.shape[0]).T
     distmat_0j = distmat[:,0].expand(distmat.shape[0], distmat.shape[0])
     gromov_prod_mat = (distmat_i0 + distmat_0j - distmat) / 2
-    
-    # Compute the (max,min)-product of the Gromov product matrix with itself in batches
+
+    # Compute the (max,min)-product of the Gromov product matrix in batches
     n = gromov_prod_mat.shape[0]
     max_min_prod = torch.zeros_like(gromov_prod_mat)
-    
     for i in range(0, n, batch_size):
         i_end = min(i + batch_size, n)
         batch_max_min = torch.min(
