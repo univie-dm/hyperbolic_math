@@ -25,8 +25,8 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         The tensor containing the pairwise distances between points
     """
     device = points.device
-    distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype).to(device)
-    indices = torch.triu_indices(points.shape[0], points.shape[0], 1).to(device)
+    distmat = torch.zeros((points.shape[0], points.shape[0]), dtype=manifold.dtype, device=device)
+    indices = torch.triu_indices(points.shape[0], points.shape[0], 1, device=device)
     while indices.shape[1] > 0:
         dist_batch = manifold.dist(points[indices[0,:batch_size]], points[indices[1,:batch_size]], version=version).reshape(-1)
         distmat[indices[0,:batch_size], indices[1,:batch_size]] = dist_batch
@@ -34,7 +34,7 @@ def compute_pairwise_distances(points: torch.Tensor, manifold: Manifold, batch_s
         indices = indices[:, batch_size:]
     return distmat
 
-def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, version="average"):
+def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, version="average", batch_size: int = 500) -> tuple:
     """
     Computes the delta hyperbolicity value for a set of points on a given manifold.
 
@@ -59,7 +59,7 @@ def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, versio
     sub_points = points[torch.randperm(points.shape[0])[:sample_size], :]
     distmat = compute_pairwise_distances(sub_points, manifold)
     # Compute the smallest/average delta satisfying the Gromov 4-point condition
-    delta = compute_hyperbolic_delta(distmat, version)
+    delta = compute_hyperbolic_delta(distmat, version, batch_size=batch_size)
     # Compute the relative delta by scaling delta with the diameter
     diam = distmat.max()
     rel_delta = delta / diam
@@ -71,7 +71,7 @@ def get_delta(points: torch.Tensor, manifold: Manifold, sample_size=1500, versio
     #relative_delta -= best_possible_delta
     return delta, diam, rel_delta
 
-def compute_hyperbolic_delta(distmat: torch.Tensor, version: str) -> torch.Tensor:
+def compute_hyperbolic_delta(distmat: torch.Tensor, version: str, batch_size: int = 500) -> torch.Tensor:
     """
     Computes the delta hyperbolicity value from a distance matrix.
 
@@ -81,6 +81,8 @@ def compute_hyperbolic_delta(distmat: torch.Tensor, version: str) -> torch.Tenso
         Tensor containing the pairwise distances between points
     version : str
         The version of delta to compute
+    batch_size : int (optional)
+        The batch size for computing the max-min product (default: 500)
 
     Returns
     -------
@@ -91,8 +93,18 @@ def compute_hyperbolic_delta(distmat: torch.Tensor, version: str) -> torch.Tenso
     distmat_i0 = distmat[:,0].expand(distmat.shape[0], distmat.shape[0]).T
     distmat_0j = distmat[:,0].expand(distmat.shape[0], distmat.shape[0])
     gromov_prod_mat = (distmat_i0 + distmat_0j - distmat) / 2
-    # Compute the (max,min)-product of the Gromov product matrix with itself
-    max_min_prod = torch.min(gromov_prod_mat.unsqueeze(1), gromov_prod_mat.unsqueeze(0)).max(dim=2).values
+
+    # Compute the (max,min)-product of the Gromov product matrix in batches
+    n = gromov_prod_mat.shape[0]
+    max_min_prod = torch.zeros_like(gromov_prod_mat)
+    for i in range(0, n, batch_size):
+        i_end = min(i + batch_size, n)
+        batch_max_min = torch.min(
+            gromov_prod_mat[i:i_end].unsqueeze(1), 
+            gromov_prod_mat.unsqueeze(0)
+        ).max(dim=2).values
+        max_min_prod[i:i_end] = batch_max_min
+    
     # Compute the average/smallest delta satisfying the Gromov 4-point condition 
     if version == "average":
         delta = (max_min_prod - gromov_prod_mat).mean()
