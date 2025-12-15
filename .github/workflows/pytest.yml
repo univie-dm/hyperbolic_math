@@ -1,4 +1,4 @@
-name: Python Package CI
+name: Run pytest and flake8
 on:
   push
 
