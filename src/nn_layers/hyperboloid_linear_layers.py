@@ -83,7 +83,6 @@ class HyperbolicLinearHyperboloid(torch.nn.Module):
             x = self.manifold.logmap_0(x, axis=self.hyperbolic_axis)
         else:
             x, = self.manifold._2manifold_dtype([x])
-            assert self.manifold.is_in_tangent_space(x, self.manifold._create_origin_from_reference(x, axis=self.hyperbolic_axis), axis=self.hyperbolic_axis)
 
         # Matrix-Vector multiplication in the tangent space at the Hyperboloid origin
         x_rem = x.narrow(self.hyperbolic_axis, 1, x.shape[self.hyperbolic_axis]-1) # (B, in_dim - 1)
