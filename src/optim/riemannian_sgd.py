@@ -72,59 +72,75 @@ class RiemannianSGD(torch.optim.Optimizer):
 
     def step(self, closure=None) -> None:
         loss = None
+
         if closure is not None:
             loss = closure()
+
         with torch.no_grad():
             for group in self.param_groups:
-                if "step" not in group:
-                    group["step"] = 0
                 weight_decay = group["weight_decay"]
                 momentum = group["momentum"]
                 dampening = group["dampening"]
                 nesterov = group["nesterov"]
                 learning_rate = group["lr"]
-                group["step"] += 1
+
                 for point in group["params"]:
                     grad = point.grad
                     if grad is None:
                         continue
 
-                    # Flag for hyperbolic parameters
-                    if isinstance(point, ManifoldParameter):
-                        manifold = point.manifold
-                    else:
-                        manifold = Euclidean()
-
-                    state = self.state[point]
                     # State initialization
+                    state = self.state[point]
                     if len(state) == 0:
-                        if momentum > 0:
-                            state["momentum_buffer"] = grad.clone()
+                        state["step"] = 0
 
                     # Actual step
-                    grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
+                    state["step"] += 1
+
+                    # Apply weight decay
+                    if weight_decay != 0:
+                        grad = grad.add(point, alpha=weight_decay)
+
+                    # Check for hyperbolic parameters to distinguish between Euclidean- and RiemannianSGD
+                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
+
+                    if param_is_hyperbolic:
+                        manifold = point.manifold
+                        # Make the gradient coordinate-system independent and orthogonally project onto the tangent space
+                        grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
+
                     if momentum > 0:
-                        momentum_buffer = state["momentum_buffer"]
-                        momentum_buffer.mul_(momentum).add_(grad, alpha=1 - dampening)
+                        if state["step"] == 1:
+                            # Initialize momentum buffer
+                            momentum_buffer = grad.clone()
+                            state["momentum_buffer"] = momentum_buffer
+                        else:
+                            # Update momentum buffer
+                            momentum_buffer = state["momentum_buffer"]
+                            momentum_buffer.mul_(momentum).add_(grad, alpha=1-dampening)
+
+                        # Nesterov momentum
                         if nesterov:
-                            grad = grad.add_(momentum_buffer, alpha=momentum)
+                            grad = grad.add(momentum_buffer, alpha=momentum)
                         else:
                             grad = momentum_buffer
 
-                    if self.expmap_update:
-                        # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis)
-                    else:
-                        # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis)
+                    if param_is_hyperbolic:
+                        if self.expmap_update:
+                            # Exact update on the manifold using the exponential map
+                            new_point = manifold.expmap(-learning_rate * grad, point, axis=self.hyperbolic_axis).to(point.dtype)
+                        else:
+                            # First-order approximation of the update using the retraction mapping
+                            new_point = manifold.retraction(-learning_rate * grad, point, axis=self.hyperbolic_axis).to(point.dtype)
 
-                    if momentum > 0:
-                        # Parallel transport the momentum to the new point
-                        new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, axis=self.hyperbolic_axis)
-                        new_momentum_buffer = new_momentum_buffer.to(momentum_buffer.dtype)
-                        momentum_buffer.copy_(new_momentum_buffer)
-                    # Use copy only for user facing point
-                    new_point = new_point.to(point.dtype)
-                    point.copy_(new_point)
+                        if momentum > 0:
+                            # Parallel transport the momentum to the new point
+                            new_momentum_buffer = manifold.ptransp(momentum_buffer, point, new_point, axis=self.hyperbolic_axis).to(momentum_buffer.dtype)
+                            momentum_buffer.copy_(new_momentum_buffer)
+
+                        # Update point
+                        point.copy_(new_point)
+                    else:
+                        # Standard SGD update in Euclidean space
+                        point.add_(grad, alpha=-learning_rate)
         return loss

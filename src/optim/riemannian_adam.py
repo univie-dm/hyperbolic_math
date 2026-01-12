@@ -77,29 +77,25 @@ class RiemannianAdam(torch.optim.Adam):
 
     def step(self, closure=None) -> None:
         loss = None
+
         if closure is not None:
             loss = closure()
+
         with torch.no_grad():
             for group in self.param_groups:
-                betas = group["betas"]
+                beta1, beta2 = group["betas"]
                 weight_decay = group["weight_decay"]
                 eps = group["eps"]
                 learning_rate = group["lr"]
                 amsgrad = group["amsgrad"]
+
                 for point in group["params"]:
                     grad = point.grad
                     if grad is None:
                         continue
 
-                    # Flag for hyperbolic parameters
-                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
-                    if param_is_hyperbolic:
-                        manifold = point.manifold
-                    else:
-                        manifold = Euclidean()
-
-                    state = self.state[point]
                     # State initialization
+                    state = self.state[point]
                     if len(state) == 0:
                         state["step"] = 0
                         # Exponential moving average of gradient values
@@ -107,50 +103,67 @@ class RiemannianAdam(torch.optim.Adam):
                         # Exponential moving average of squared gradient values
                         state["exp_avg_sq"] = torch.zeros_like(point)
                         if amsgrad:
-                            # Maintains max of all exp. moving avg. of sq. grad. values
+                            # Maintains the max of all exp_avg_sq
                             state["max_exp_avg_sq"] = torch.zeros_like(point)
+
+                    # Actual step
                     state["step"] += 1
-                    # Make local variables for easy access
                     exp_avg = state["exp_avg"]
                     exp_avg_sq = state["exp_avg_sq"]
-                    # Actual step
-                    grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
-                    exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
+
+                    # Apply weight decay
+                    if weight_decay != 0:
+                        grad = grad.add(point, alpha=weight_decay)
+
+                    # Check for hyperbolic parameters to distinguish between Euclidean- and RiemannianAdam
+                    param_is_hyperbolic = isinstance(point, ManifoldParameter) and not isinstance(point.manifold, Euclidean)
 
                     if param_is_hyperbolic:
-                        # Hyperbolic parameter: Compute <grad, grad>_x in tangent space
-                        exp_avg_sq_new = manifold.tangent_inner(grad, grad, point, axis=self.hyperbolic_axis)
-                        exp_avg_sq_new = exp_avg_sq_new.to(grad.dtype)
-                    else:
-                        # Euclidean parameter: Compute grad^2 component-wise
-                        exp_avg_sq_new = grad.pow(2)
+                        manifold = point.manifold
+                        # Make the gradient coordinate-system independent and orthogonally project onto the tangent space
+                        grad = manifold.egrad2rgrad(grad, point, axis=self.hyperbolic_axis)
 
-                    exp_avg_sq.mul_(betas[1]).add_(exp_avg_sq_new, alpha=1 - betas[1])
-                    bias_correction1 = 1 - betas[0] ** state["step"]
-                    bias_correction2 = 1 - betas[1] ** state["step"]
+                    # Decay the first and second moment running average coefficient
+                    exp_avg.lerp_(grad, 1-beta1)
+                    if param_is_hyperbolic:
+                        # Compute <grad, grad>_x in tangent space
+                        grad_tangent_inner = manifold.tangent_inner(grad, grad, point, axis=self.hyperbolic_axis).to(grad.dtype)
+                        exp_avg_sq.lerp_(grad_tangent_inner, 1-beta2)
+                    else:
+                        # Compute grad^2 component-wise
+                        exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1-beta2)
+
+                    bias_correction1 = 1 - beta1 ** state["step"]
+                    bias_correction2 = 1 - beta2 ** state["step"]
+
                     if amsgrad:
+                        # Update max_exp_avg_sq and use it for normalizing moving averages
                         max_exp_avg_sq = state["max_exp_avg_sq"]
-                        # Maintains the maximum of all 2nd moment running avg. till now
-                        torch.max(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
-                        # Use the max. for normalizing running avg. of gradient
-                        denom = max_exp_avg_sq.div(bias_correction2).sqrt_()
+                        torch.maximum(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
+                        # Use max_exp_avg_sq for normalizing running averages
+                        denom = max_exp_avg_sq.div(bias_correction2).sqrt().add_(eps)
                     else:
-                        denom = exp_avg_sq.div(bias_correction2).sqrt_()
-                    # Get the direction for ascend
-                    direction = exp_avg.div(bias_correction1) / denom.add_(eps)
+                        denom = exp_avg_sq.div(bias_correction2).sqrt().add_(eps)
 
-                    if self.expmap_update:
-                        # Exact update on the manifold using the exponential map
-                        new_point = manifold.expmap(-learning_rate * direction, point, axis=self.hyperbolic_axis)
+                    # Get the step size
+                    step_size = learning_rate / bias_correction1
+
+                    if param_is_hyperbolic:
+                        # Perform Riemannian Adam update with the bias-corrected moment 'exp_avg / denom'
+                        if self.expmap_update:
+                            # Exact update on the manifold using the exponential map
+                            new_point = manifold.expmap(-step_size * exp_avg / denom, point, axis=self.hyperbolic_axis).to(point.dtype)
+                        else:
+                            # First-order approximation of the update using the retraction mapping
+                            new_point = manifold.retraction(-step_size * exp_avg / denom, point, axis=self.hyperbolic_axis).to(point.dtype)
+
+                        # Parallel transport the exponential averaging to the new point
+                        new_exp_avg = manifold.ptransp(exp_avg, point, new_point, axis=self.hyperbolic_axis).to(exp_avg.dtype)
+
+                        # Update point and the running average
+                        point.copy_(new_point)
+                        exp_avg.copy_(new_exp_avg)
                     else:
-                        # First-order approximation of the update using the retraction mapping
-                        new_point = manifold.retraction(-learning_rate * direction, point, axis=self.hyperbolic_axis)
-                    # Parallel transport the exponential averaging to the new point
-                    exp_avg_new = manifold.ptransp(exp_avg, point, new_point, axis=self.hyperbolic_axis)
-                    # Use copy only for user facing point
-                    new_point = new_point.to(point.dtype)
-                    exp_avg_new = exp_avg_new.to(exp_avg.dtype)
-                    point.copy_(new_point)
-                    exp_avg.copy_(exp_avg_new)
+                        # Standard Adam update in Euclidean space
+                        point.addcdiv_(exp_avg, denom, value=-step_size)
         return loss
