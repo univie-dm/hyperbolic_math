@@ -9,6 +9,7 @@ from .hyperbolic_standard_layers import HyperbolicActivation
 from .hyperboloid_linear_layers import HyperbolicLinearHyperboloid
 from .hyperboloid_linear_layers import HyperbolicLinearHyperboloidFHNN
 from .hyperboloid_linear_layers import HyperbolicLinearHyperboloidFHCNN
+from .hyperboloid_linear_layers import HyperbolicLinearHyperboloidPP
 from .hyperboloid_regression_layers import HyperbolicRegressionHyperboloid
 from .poincare_linear_layers import HyperbolicLinearPoincare
 from .poincare_linear_layers import HyperbolicLinearPoincarePP
