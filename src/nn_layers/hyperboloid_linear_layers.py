@@ -390,7 +390,8 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
                   f"All manifold operations will be performed in lower precision {manifold.dtype}!")
 
         self.requires_grad = requires_grad
-        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
+        # weight lies in the tangent space of the Hyperboloid origin, so the time coordinate along self.hyperbolic_axis is zero
+        weight = torch.randn((output_dim, input_dim-1), dtype=self.params_dtype)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
         bias = torch.zeros((self.output_dim, 1), dtype=self.params_dtype)
         self.bias = torch.nn.Parameter(bias, requires_grad=self.requires_grad)
@@ -401,7 +402,7 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Input: x of shape (B, in_dim) where the hyperbolic_axis is last
-        Parameters: self.weight of shape (out_dim, in_dim), self.bias of shape (out_dim, 1)
+        Parameters: self.weight of shape (out_dim, in_dim-1), self.bias of shape (out_dim, 1)
         Output: res of shape (B, out_dim)
         """
         assert x.shape[self.hyperbolic_axis] == self.weight.shape[self.hyperbolic_axis] + 1, \
@@ -410,6 +411,7 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
 
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
+            z, r = self.manifold._2manifold_dtype([self.weight, self.bias])
         else:
             x, z, r = self.manifold._2manifold_dtype([x, self.weight, self.bias])
 
