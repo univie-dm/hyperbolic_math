@@ -2,9 +2,9 @@ import torch
 
 from typing import Union
 
-from .helpers import get_torch_dtype
+from .helpers import get_torch_dtype, compute_mlr_Hyperboloid
 from ..manifolds import Hyperboloid
-from ..utils.math_utils import cosh, sinh
+from ..utils.math_utils import sinh
 
 
 class HyperbolicLinearHyperboloid(torch.nn.Module):
@@ -360,6 +360,10 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
         Whether the parameters should require gradients (default: True)
     input_space : str
         Type of the input tensor, either 'tangent' or 'manifold' (default: 'manifold')
+    clamping_factor : float
+        Clamping factor for the multinomial linear regression output (default: 1.0)
+    smoothing_factor : float
+        Smoothing factor for the multinomial linear regression output (default: 50.0)
 
     References
     ----------
@@ -374,7 +378,9 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
         hyperbolic_axis: int = -1,
         params_dtype: str = "float32",
         requires_grad: bool = True,
-        input_space: str = "manifold"
+        input_space: str = "manifold",
+        clamping_factor: float = 1.0,
+        smoothing_factor: float = 50.0
     ):
         super().__init__()
         assert isinstance(manifold, Hyperboloid), "manifold must be an instance of Hyperboloid"
@@ -399,6 +405,9 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
         assert input_space in ["tangent", "manifold"], "input_space must be either 'tangent' or 'manifold'"
         self.input_space = input_space
 
+        self.clamping_factor = clamping_factor
+        self.smoothing_factor = smoothing_factor
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Input: x of shape (B, in_dim) where the hyperbolic_axis is last
@@ -411,18 +420,13 @@ class HyperbolicLinearHyperboloidPP(torch.nn.Module):
 
         if self.input_space == "tangent":
             x = self.manifold.expmap_0(x, axis=self.hyperbolic_axis)
-            z, r = self.manifold._2manifold_dtype([self.weight, self.bias])
-        else:
-            x, z, r = self.manifold._2manifold_dtype([x, self.weight, self.bias])
 
-        # Compute the Hyperboloid MLR score(s)
+        # Compute the HNN++ MLR scores: ||z|| * signed_dist
+        v = compute_mlr_Hyperboloid(self.manifold, x, self.weight, self.bias, self.hyperbolic_axis,
+                                    self.clamping_factor, self.smoothing_factor)
+        # Adjust the time coordinate for the ouput to lie on the Hyperboloid
         sqrt_c = self.manifold.c.sqrt()
-        sqrt_cr = sqrt_c * r.T # (1, out_dim)
-        z_norm = z.norm(p=2, dim=self.hyperbolic_axis, keepdim=True).clamp_min(self.manifold.min_enorm).T # (1, out_dim)
-        x0 = x.narrow(self.hyperbolic_axis, 0, 1) # (B, 1)
-        x_rem = x.narrow(self.hyperbolic_axis, 1, x.shape[self.hyperbolic_axis]-1) # (B, in_dim-1)
-        zx_rem = (x_rem.unsqueeze(-1) * z.T.unsqueeze(0)).sum(dim=1) # (B, out_dim)
-        res_rem = -x0 * sinh(sqrt_cr) + cosh(sqrt_cr) * zx_rem / z_norm # (B, out_dim)
+        res_rem = sinh(sqrt_c * v) / sqrt_c # (B, out_dim - 1)
         res0 = (res_rem.pow(2).sum(dim=self.hyperbolic_axis, keepdim=True) + 1 / self.manifold.c).sqrt() # (B, 1)
-        res = torch.cat([res0, x_rem], dim=self.hyperbolic_axis) # (B, out_dim)
+        res = torch.cat([res0, res_rem], dim=self.hyperbolic_axis) # (B, out_dim)
         return res
