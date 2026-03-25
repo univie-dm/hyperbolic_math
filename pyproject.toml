@@ -9,6 +9,7 @@ authors = [
     { name="Thomas Lang", email="thomas.lang@univie.ac.at" },
     { name="Kevin Sidak", email="kevin.sidak@univie.ac.at" }
 ]
+readme = "README.md"
 description = "A PyTorch-based library for hyperbolic geometry and deep learning in hyperbolic spaces."
 requires-python = ">=3.8,<3.11"
 dependencies = [
