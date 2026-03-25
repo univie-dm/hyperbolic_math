@@ -15,4 +15,3 @@ from .poincare_linear_layers import HyperbolicLinearPoincare
 from .poincare_linear_layers import HyperbolicLinearPoincarePP
 from .poincare_regression_layers import HyperbolicRegressionPoincare
 from .poincare_regression_layers import HyperbolicRegressionPoincarePP
-from .poincare_rl_layers import HyperbolicRegressionPoincareHDRL
