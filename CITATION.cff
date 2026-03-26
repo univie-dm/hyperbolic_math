@@ -6,10 +6,10 @@ authors:
     given-names: "Thomas"
   - family-names: "Sidak"
     given-names: "Kevin"
-  - family-names: "Plant"
-    given-names: "Claudia"
   - family-names: "Velaj"
     given-names: "Yllka"
+  - family-names: "Plant"
+    given-names: "Claudia"
 version: "0.1.7"
 doi: "10.5281/zenodo.19236209"
 date-released: 2026-03-26
