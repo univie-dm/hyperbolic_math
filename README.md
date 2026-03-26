@@ -217,16 +217,16 @@ Tests include:
 
 
 ## Citation
-TODO:
 If you use this library in your research, please cite:
-
 ```bibtex
-@software{hyperbolic_math_2024,
+@software{hyperbolic_math_2026,
   title = {Hyperbolic Math: A PyTorch Library for Hyperbolic Deep Learning},
   author = {Lang, Thomas and Sidak, Kevin},
-  year = {2024},
-  institution = {University of Vienna},
-  url = {https://github.com/univie-dm/hyperbolic-math}
+  version = {0.1.7},
+  year = {2026},
+  publisher = {Zenodo},
+  doi = {10.5281/zenodo.19236209},
+  url = {https://doi.org/10.5281/zenodo.19236209}
 }
 ```
 

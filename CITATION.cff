@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it using the following metadata."
+title: "Hyperbolic Math: A PyTorch Library for Hyperbolic Deep Learning"
+authors:
+  - family-names: "Lang"
+    given-names: "Thomas"
+  - family-names: "Sidak"
+    given-names: "Kevin"
+version: "0.1.7"
+doi: "10.5281/zenodo.19236209"
+date-released: 2026-03-26
+url: "https://github.com/univie-dm/hyperbolic-math"
+repository-code: "https://github.com/univie-dm/hyperbolic-math"
+license: "MIT"

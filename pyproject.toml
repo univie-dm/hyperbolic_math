@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hyperbolic_math"
-version = "0.1.6"
+version = "0.1.7"
 authors = [
     { name="Thomas Lang", email="thomas.lang@univie.ac.at" },
     { name="Kevin Sidak", email="kevin.sidak@univie.ac.at" }
