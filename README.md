@@ -46,6 +46,12 @@ A PyTorch-based library for hyperbolic geometry and deep learning in hyperbolic 
 
 ## Installation
 
+### From PyPi
+
+```bash
+pip install hyperbolic-math
+```
+
 ### From Source
 
 ```bash
