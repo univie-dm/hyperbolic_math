@@ -2,8 +2,8 @@ import pytest
 import torch
 
 from typing import Tuple
-from src.manifolds import Manifold, ManifoldParameter
-from src.optim import RiemannianAdam, RiemannianSGD
+from hyperbolic_math.manifolds import Manifold, ManifoldParameter
+from hyperbolic_math.optim import RiemannianAdam, RiemannianSGD
 
 
 @pytest.mark.parametrize("expmap_update", [True, False])

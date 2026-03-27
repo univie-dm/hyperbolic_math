@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from typing import Tuple
-from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
+from hyperbolic_math.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
 def test_addition(manifold: Manifold, tolerance: Tuple[float, float],

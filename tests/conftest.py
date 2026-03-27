@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from typing import Tuple
-from src.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
+from hyperbolic_math.manifolds import Manifold, Euclidean, Hyperboloid, PoincareBall
 
 
 @pytest.fixture(scope="package", params=[*range(10, 13)])

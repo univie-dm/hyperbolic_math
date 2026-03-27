@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hyperbolic_math"
-version = "0.1.7"
+version = "0.1.8"
 authors = [
     { name="Thomas Lang", email="thomas.lang@univie.ac.at" },
     { name="Kevin Sidak", email="kevin.sidak@univie.ac.at" }
@@ -25,7 +25,6 @@ dev = ["pytest>=8.3.3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["hyperbolic_test*", "manifolds*", "utils*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra -q --log-cli-level=DEBUG"
