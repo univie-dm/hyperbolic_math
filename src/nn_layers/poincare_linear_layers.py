@@ -1,3 +1,5 @@
+import math
+
 import torch
 
 from .helpers import compute_mlr_PoincarePP, get_torch_dtype
@@ -59,7 +61,9 @@ class HyperbolicLinearPoincare(torch.nn.Module):
                   f"All manifold operations will be performed in lower precision {manifold.dtype}!")
 
         self.requires_grad = requires_grad
-        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
+        # Kaiming/fan-in scaling: without it, random tangent magnitudes ~ sqrt(input_dim)
+        # push expmap_0 outputs onto the Poincaré boundary at init (norm ~ tanh(sqrt(D)) ≈ 1).
+        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype) / math.sqrt(input_dim)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
         bias = torch.zeros((1, self.output_dim), dtype=self.params_dtype)
         self.bias = ManifoldParameter(bias, requires_grad=self.requires_grad, manifold=self.manifold)
@@ -144,7 +148,9 @@ class HyperbolicLinearPoincarePP(torch.nn.Module):
                   f"All manifold operations will be performed in lower precision {manifold.dtype}!")
 
         self.requires_grad = requires_grad
-        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype)
+        # Kaiming/fan-in scaling: prevents random init from saturating outputs onto
+        # the Poincaré boundary (tangent magnitudes otherwise ~ sqrt(input_dim)).
+        weight = torch.randn((output_dim, input_dim), dtype=self.params_dtype) / math.sqrt(input_dim)
         self.weight = torch.nn.Parameter(weight, requires_grad=requires_grad)
         bias = torch.zeros((self.output_dim, 1), dtype=self.params_dtype)
         self.bias = torch.nn.Parameter(bias, requires_grad=self.requires_grad)

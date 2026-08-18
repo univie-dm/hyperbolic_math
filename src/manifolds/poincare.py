@@ -30,6 +30,17 @@ class PoincareBall(Manifold):
             self.min_enorm = 1e-15
             self.max_enorm_eps = 1e-08
 
+        # Optional wider safety margin to the ball boundary. The defaults above
+        # sit at the edge of what the dtype can resolve: at ||x|| = 1 - 1e-8 the
+        # quantity (1 - c||x||^2) is ~2e-8 and is known only to ~1e-16 absolute,
+        # so geodesic distances between boundary-saturated points degenerate into
+        # ties. Raising this keeps points in a region where the distance formula
+        # retains full precision, at the cost of a slightly smaller usable ball.
+        # None (the default) preserves the dtype-derived value exactly.
+        _eps_override = kwargs.get('max_enorm_eps', None)
+        if _eps_override is not None:
+            self.max_enorm_eps = float(_eps_override)
+
         # Store version configurations from kwargs
         self.dist_version = kwargs.get('dist_version', 'default') # 'default', 'mobius', 'metric_tensor'
 

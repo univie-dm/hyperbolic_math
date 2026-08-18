@@ -121,7 +121,7 @@ def compute_mlr_PoincarePP(manifold: PoincareBall, x: torch.Tensor, z: torch.Ten
         """
         x, z, r = manifold._2manifold_dtype([x, z, r])
         sqrt_c = manifold.c.sqrt()
-        sqrt_c2r = 2 * sqrt_c * r.T # (1, out_dim)
+        sqrt_c2r = 2 * sqrt_c * r.reshape(1, -1) # (1, out_dim)
         z_norm = z.norm(p=2, dim=hyperbolic_axis, keepdim=True).clamp_min(manifold.min_enorm) # (out_dim, 1)
         lambda_x = manifold._lambda(x, axis=hyperbolic_axis) # (B, 1)
         z_unitx = (x.unsqueeze(-1) * (z / z_norm).T).sum(dim=1) # (B, out_dim)
