@@ -41,8 +41,13 @@ def test_scalar_mul(seed: None, manifold: Manifold, tolerance: Tuple[float, floa
     """Test the scalar_mul operation."""
     atol, rtol = tolerance
     identity = torch.ones((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
-    r1 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
-    r2 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype)
+    # Note: torch.rand() draws from [0, 1) and does emit an exact 0.0 (with probability
+    #       2**-24 per float32 draw). The scaling property below divides by
+    #       ||scalar_mul(r1, x)||, which is 0 for r1 == 0, so exclude the zero scalar here.
+    #       r == 0 is covered separately by the numerical stability checks at the end.
+    r_min = torch.finfo(uniform_points.dtype).eps
+    r1 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype).clamp_min(r_min)
+    r2 = torch.rand((uniform_points.shape[0], 1), dtype=uniform_points.dtype).clamp_min(r_min)
     if isinstance(manifold, Hyperboloid):
         origin = manifold._create_origin_from_reference(uniform_points)
     else:

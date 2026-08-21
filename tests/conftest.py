@@ -47,9 +47,20 @@ def uniform_points(seed: None, manifold: Manifold, request: pytest.FixtureReques
         bound = 100
         points = torch.empty((num_pts, dim), dtype=manifold.dtype).uniform_(-bound, bound)
     else:   # PoincareBall & Hyperboloid
+        # Note: keep the sampled points a fixed distance away from the ball boundary.
+        #       dist() evaluates atanh(sqrt(c) * ||(-x) (+) y||), whose argument saturates
+        #       at 1 as 1-c*||x||^2 -> 0, so the rounding error of the argument is amplified
+        #       by 1/(1-c*||x||^2). Drawing radii all the way up to 1/sqrt(c) therefore
+        #       produces distances that are off by up to ~2e+01 (float32) resp. ~2e-07
+        #       (float64) -- at or above the tolerances these tests compare against, which
+        #       makes the metric axioms (e.g. the triangle inequality) fail on the odd draw.
+        #       The margins below were measured to keep dist()'s error an order of magnitude
+        #       below atol.
+        boundary_gap = 1e-1 if manifold.dtype == torch.float32 else 1e-3
         random_dirs = torch.normal(0, 1, size=(num_pts, dim), dtype=manifold.dtype)
         random_dirs /= random_dirs.norm(p=2, dim=-1, keepdim=True)
         random_radii = torch.rand((num_pts, 1), dtype=manifold.dtype).pow(1 / dim)
+        random_radii = random_radii * (1 - boundary_gap) ** 0.5
         points = manifold.c**-0.5 * (random_dirs * random_radii)
         if isinstance(manifold, Hyperboloid): # Hyperboloid
             poincare = PoincareBall(c=manifold.c, dtype=manifold.dtype)
