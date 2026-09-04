@@ -227,7 +227,7 @@ If you use this library in your research, please cite:
 ```bibtex
 @software{hyperbolic_math_2026,
   title = {Hyperbolic Math: A PyTorch Library for Hyperbolic Deep Learning},
-  author = {Lang, Thomas and Sidak, Kevin and Velaj, Yllka and Plant, Claudia},
+  author = {Lang, Thomas and Sidak, Kevin and Plant, Claudia and Velaj, Yllka},
   version = {0.1.7},
   year = {2026},
   publisher = {Zenodo},
